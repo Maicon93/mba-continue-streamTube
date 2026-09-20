@@ -37,6 +37,13 @@ describe('Database migrations (integration)', () => {
       ),
       dataSource.query(`DROP TABLE IF EXISTS "migrations" CASCADE`),
     ]);
+
+    // DROP TABLE does not remove the enum type the table depends on, so a
+    // previously migrated database would fail on the next run with
+    // "type already exists". Drop it explicitly to keep the suite repeatable.
+    await dataSource.query(
+      `DROP TYPE IF EXISTS "verification_tokens_type_enum" CASCADE`,
+    );
   });
 
   afterAll(async () => {
