@@ -97,15 +97,16 @@ Deliver object storage, a background processing queue and a video worker so a us
 - Create `src/storage/storage.module.ts` and `src/storage/storage.service.ts`
 - Build two `S3Client` instances from `storageConfig`: the internal one on `S3_ENDPOINT`, the signing one on `S3_PUBLIC_ENDPOINT`, both with `forcePathStyle: true` and the same credentials (per `phase-03-videos/TD-11`)
 - Implement a key builder: `videos/{videoId}/source{ext}` and `videos/{videoId}/thumbnail.jpg` (per `phase-03-videos/TD-02`) — keyed by the internal uuid, never by `public_id` or by a user-supplied filename
-- On module init, ensure the bucket exists (`HeadBucket`, then `CreateBucket` when absent) and apply `PutBucketLifecycleConfiguration` with `AbortIncompleteMultipartUpload: { DaysAfterInitiation: UPLOAD_ABORT_AFTER_DAYS }` (per `phase-03-videos/TD-15`) — idempotent, safe on every boot
-- Expose the operations the phase needs: `createMultipartUpload`, `signUploadPart`, `listParts`, `completeMultipartUpload`, `abortMultipartUpload`, `signDownload({ key, disposition })`, `putObject`, `getObjectStream`, `deleteObject`
+- On module init, ensure the bucket exists (`HeadBucket`, then `CreateBucket` when absent) — idempotent, safe on every boot. CORS is **not** applied per bucket: MinIO answers `NotImplemented` to `PutBucketCors`; it is a server-level setting (`MINIO_API_CORS_ALLOW_ORIGIN` in `compose.yaml`). Abandoned-upload cleanup is **not** a lifecycle rule: MinIO does not support `AbortIncompleteMultipartUpload` via `PutBucketLifecycle`, so it is a repeatable job in SI-03.7 (per `phase-03-videos/TD-19`, superseding `phase-03-videos/TD-15`)
+- Expose the operations the phase needs: `createMultipartUpload`, `signUploadPart`, `listParts`, `listMultipartUploads`, `completeMultipartUpload`, `abortMultipartUpload`, `signDownload({ key, disposition })`, `putObject`, `getObjectStream`, `deleteObject`
 - `signUploadPart` and `signDownload` sign through the **public** client; every other operation goes through the internal one
 
 **Dependencies:** SI-03.1
 
 **Acceptance criteria:**
 
-- Integration test against the real MinIO: the bucket is created on first boot and the second boot is a no-op; `GetBucketLifecycleConfiguration` returns the abort rule with the configured number of days
+- Integration test against the real MinIO: the bucket is created on first boot and the second boot is a no-op
+- Integration test: a ranged `GET` on a presigned URL returns `206` with a `Content-Range` header and exactly the requested byte count
 - Integration test: a URL produced by `signUploadPart` carries the public endpoint's host, while `listParts` reaches MinIO through the internal endpoint in the same run
 - Unit test: the key builder produces the two documented shapes and rejects a video id that is not a uuid
 
@@ -167,14 +168,16 @@ Deliver object storage, a background processing queue and a video worker so a us
 - Register the queue `video-processing` via `BullModule.registerQueue`
 - Define the job payload contract in `src/videos/video-job.types.ts` as `{ videoId: string }` — the worker re-reads the row rather than trusting a denormalized payload, which is what keeps the handler idempotent under at-least-once delivery
 - The prefix is read from config so integration suites can set a per-suite value (per `phase-03-videos/TD-10`); the same prefix must be configured on both producer and consumer
+- Register a repeatable job `abandoned-upload-cleanup` running every 24h whose handler lists multipart uploads and aborts those initiated more than `UPLOAD_ABORT_AFTER_DAYS` ago (per `phase-03-videos/TD-19`) — MinIO does not support the equivalent bucket lifecycle rule
 
-**Dependencies:** SI-03.1
+**Dependencies:** SI-03.1, SI-03.4
 
 **Acceptance criteria:**
 
 - Integration against the real Redis: a job added to `video-processing` is visible under the configured prefix and absent under a different prefix
 - Integration: a handler that throws is retried up to the configured attempt count with growing delay, and the job lands in the failed set only after the last attempt
 - Unit: the job payload type compiles against the producer and consumer call sites
+- Integration against real MinIO: an upload initiated and left open is aborted by the cleanup handler when older than the threshold, and a fresh one is left untouched
 
 ---
 
@@ -279,7 +282,7 @@ Deliver object storage, a background processing queue and a video worker so a us
 - `GET /videos/:publicId/download` — the same signature with `ResponseContentDisposition: attachment; filename="<sanitized title>.<ext>"`
 - Both endpoints resolve the owning channel and reject a video the caller does not own as `404 VIDEO_NOT_FOUND` rather than `403`, so ownership is not probeable by enumeration (per `phase-03-videos/TD-14`)
 - Return `409 VIDEO_NOT_READY` when the video exists and is owned by the caller but has not finished processing
-- Configure CORS on the bucket at bootstrap so a browser `<video>` element can issue range requests against the presigned URL
+- CORS for browser playback comes from the MinIO server setting configured in `compose.yaml` — the per-bucket CORS API is not implemented by MinIO
 
 **Dependencies:** SI-03.10
 
@@ -554,7 +557,7 @@ Errors are thrown as `DomainException` subclasses and rendered by the inherited 
 SI-03.1 (no deps)
 ├── SI-03.3
 ├── SI-03.4
-├── SI-03.7
+│   └── SI-03.7
 └── SI-03.9
 
 SI-03.2 (no deps)
@@ -585,7 +588,7 @@ Critical path: SI-03.1 → SI-03.4 → SI-03.10 → SI-03.12 → SI-03.13 → SI
 - [ ] Upload of files up to 10GB with no video byte passing through the API (presigned multipart direct to storage)
 - [ ] Video pre-registered as `draft` when the upload starts
 - [ ] Upload resumable after a dropped connection, with the storage as the source of truth for stored parts
-- [ ] Abandoned multipart uploads bounded by a 7-day bucket lifecycle rule
+- [ ] Abandoned multipart uploads bounded by a repeatable cleanup job (MinIO does not support the lifecycle rule)
 - [ ] Automatic processing after upload: duration, resolution and container metadata extracted with `ffprobe`
 - [ ] Thumbnail generated automatically from a frame at 10% of the duration, 1280px wide, stored in the bucket
 - [ ] Unique 12-character public URL per video, unique-indexed, stable across title edits

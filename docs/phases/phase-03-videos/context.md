@@ -69,7 +69,8 @@ sources_mtime:
 | phase-03-videos/TD-12 | technical-decisions-phase-03-videos.md | Cross-layer | Resumable Upload After a Connection Failure | decided | A (Persist only the `uploadId`) | — |
 | phase-03-videos/TD-13 | technical-decisions-phase-03-videos.md | Backend | Persisted Video Metadata Shape | decided | C (Hybrid — typed columns + `jsonb`) | — |
 | phase-03-videos/TD-14 | technical-decisions-phase-03-videos.md | Backend | Authorization Policy for the Video Endpoints | decided | A (Authenticated and owner-scoped) | — |
-| phase-03-videos/TD-15 | technical-decisions-phase-03-videos.md | Backend | Abandoned Uploads and Object Lifecycle | decided | A (Bucket lifecycle rule) | — |
+| phase-03-videos/TD-15 | technical-decisions-phase-03-videos.md | Backend | Abandoned Uploads and Object Lifecycle | superseded-by phase-03-videos/TD-19 | ~~A~~ | — |
+| phase-03-videos/TD-19 | technical-decisions-phase-03-videos.md | Backend | Abandoned Upload Cleanup (supersedes TD-15) | decided | A (Repeatable job on the existing queue) | bullmq@^6.3.8 |
 | phase-03-videos/TD-16 | technical-decisions-phase-03-videos.md | Backend | Accepted File Policy | decided | A (Declare-and-verify) | — |
 | phase-03-videos/TD-17 | technical-decisions-phase-03-videos.md | Backend | How the Test Suites Exercise the Worker | decided | A (Processor in the test context) | — |
 | phase-03-videos/TD-18 | technical-decisions-phase-03-videos.md | Backend | Resolving the Owning Channel of the Authenticated User | decided | A (`ChannelsService.findByUserId`) | — |
@@ -84,7 +85,7 @@ _Libraries pinned by `plan-resolve`; per-library documentation excerpts are cach
 
 | Capability (from project-plan.md) | Covered by |
 |-----------------------------------|------------|
-| Serviço de armazenamento de arquivos (vídeos e thumbnails) | phase-03-videos/TD-02, phase-03-videos/TD-10, phase-03-videos/TD-11, phase-03-videos/TD-15 |
+| Serviço de armazenamento de arquivos (vídeos e thumbnails) | phase-03-videos/TD-02, phase-03-videos/TD-10, phase-03-videos/TD-11, phase-03-videos/TD-19 |
 | Serviço de processamento em segundo plano (filas) | phase-03-videos/TD-01, phase-03-videos/TD-05, phase-03-videos/TD-10, phase-03-videos/TD-17 |
 | Upload de vídeos com suporte a arquivos de até 10GB sem impacto na performance | phase-03-videos/TD-03, phase-03-videos/TD-10, phase-03-videos/TD-11, phase-03-videos/TD-12, phase-03-videos/TD-16 |
 | Pré-cadastro automático do vídeo como rascunho ao iniciar o upload | phase-03-videos/TD-04, phase-03-videos/TD-09, phase-03-videos/TD-14, phase-03-videos/TD-18 |
@@ -206,13 +207,15 @@ _Libraries pinned by `plan-resolve`; per-library documentation excerpts are cach
 
 **Libraries:** —
 
-### phase-03-videos/TD-15
+### phase-03-videos/TD-19
 
-**Recommendation:** Bucket lifecycle rule — the storage implements abandoned-multipart cleanup natively, costing one call at bucket bootstrap instead of a scheduled job with its own tests and failure modes.
+_(supersedes `phase-03-videos/TD-15`, whose premise — that the storage implements abandoned-multipart cleanup natively — does not hold for MinIO: its S3-compatibility documentation states the `AbortIncompleteMultipartUpload` lifecycle action is not supported via `PutBucketLifecycle`, confirmed against `RELEASE.2025-09-07T16-13-09Z`.)_
 
-**Contract:** lifecycle configuration with `AbortIncompleteMultipartUpload: { DaysAfterInitiation: 7 }`, applied at bucket bootstrap.
+**Recommendation:** Repeatable job on the existing queue — the queue is already part of this phase, so the marginal cost is a handler rather than a component, and it is the only option that behaves the same on MinIO and on real S3.
 
-**Libraries:** —
+**Contract:** a repeatable job `abandoned-upload-cleanup` runs every 24h, lists multipart uploads under the bucket and aborts those older than `UPLOAD_ABORT_AFTER_DAYS` (default 7). TD-12's explicit-deletion path is unchanged.
+
+**Libraries:** `bullmq@^6.3.8`
 
 ### phase-03-videos/TD-16
 

@@ -459,6 +459,7 @@ Keying by the video's internal UUID (not by the public URL id of TD-07, and not 
 ---
 
 ## TD-15: Abandoned Uploads and Object Lifecycle
+<!-- status: superseded-by: phase-03-videos/TD-19 -->
 
 **Scope:** Backend
 
@@ -486,7 +487,7 @@ Keying by the video's internal UUID (not by the public URL id of TD-07, and not 
 
 **Contract fixed by this decision:** at bucket bootstrap the API applies a lifecycle configuration with `AbortIncompleteMultipartUpload: { DaysAfterInitiation: 7 }`. The 7-day window is longer than any plausible legitimate upload and short enough to bound the leak.
 
-**Decision:** A (Bucket lifecycle rule — `AbortIncompleteMultipartUpload` after 7 days)
+**Decision:** ~~A (Bucket lifecycle rule — `AbortIncompleteMultipartUpload` after 7 days)~~ — **superseded by `phase-03-videos/TD-19`**. Option A rests on the premise that the storage implements this natively; MinIO does not. Verified against `RELEASE.2025-09-07T16-13-09Z`: a rule carrying only `AbortIncompleteMultipartUpload` is rejected with `InvalidArgument`, and when the rule is accepted alongside an `Expiration` action the abort action is silently dropped from what `GetBucketLifecycleConfiguration` reads back. MinIO's own S3-compatibility documentation states it outright: *"the `AbortIncompleteMultipartUpload` lifecycle action is not supported when using `PutBucketLifecycle`"*. With the premise gone, Option B is what the same reasoning selects.
 
 ---
 
@@ -578,6 +579,42 @@ Keying by the video's internal UUID (not by the public URL id of TD-07, and not 
 **Decision:** A (Add `findByUserId` to the inherited `ChannelsService`)
 
 
+---
+
+## TD-19: Abandoned Upload Cleanup (supersedes TD-15)
+
+**Scope:** Backend
+
+**Capability:** Serviço de armazenamento de arquivos (vídeos e thumbnails)
+
+**Context:** `phase-03-videos/TD-15` chose a bucket lifecycle rule to bound the cost of abandoned multipart uploads, on the grounds that the storage implements the behavior natively and using it would cost one call at bucket bootstrap. That premise does not hold for MinIO: its S3-compatibility documentation states that *"the `AbortIncompleteMultipartUpload` lifecycle action is not supported when using `PutBucketLifecycle`"*, and testing against `RELEASE.2025-09-07T16-13-09Z` confirms it — the rule is rejected outright when it carries only the abort action, and the action is silently discarded when paired with an `Expiration`. The requirement it addressed is unchanged and still comes from `docs/project-plan.md` § Pontos de Atenção: *"É importante planejar o crescimento e os custos de armazenamento desde o início."*
+
+**Options:**
+
+### Option A: Repeatable job on the existing queue
+- A BullMQ repeatable job runs daily, calls `ListMultipartUploads`, and aborts every upload initiated more than N days ago.
+- **Pros:** Uses infrastructure the phase already has — the queue exists for video processing and repeatable jobs are a first-class BullMQ feature, so this adds a handler, not a component. The policy is explicit, testable against real MinIO, and portable: it behaves identically on real S3, where the native rule would otherwise make the two environments diverge. Reuses the `abortMultipartUpload` call already needed by TD-12's draft-deletion path.
+- **Cons:** Application code where a storage feature was expected: a handler, its schedule and its tests. One more job to reason about when the worker is unhealthy.
+
+### Option B: Rely on MinIO's internal cleanup
+- MinIO removes stale incomplete uploads on its own cadence; do nothing explicit.
+- **Pros:** No code at all.
+- **Cons:** Undocumented as a contract and not configurable through the S3 API, so the retention window is whatever the server decides and can change between releases. Nothing carries over to production S3, where no equivalent implicit behavior exists. Leaves the Ponto de Atenção answered by an assumption rather than by a decision.
+
+### Option C: Manual operator cleanup (`mc rm --incomplete`)
+- Document the command and leave it to an operator.
+- **Pros:** Zero code, and it is the tool MinIO's own documentation points to.
+- **Cons:** A cost control that depends on someone remembering to run it is not a control. Not reproducible in tests, and absent from production.
+
+**Recommendation:** **Option A (repeatable job)** — the queue is already part of this phase, so the marginal cost is a handler rather than a component, and it is the only option that behaves the same on MinIO and on S3. Option B substitutes an undocumented server behavior for a decision, and Option C moves the requirement onto a human.
+
+**Contract fixed by this decision:** a repeatable job `abandoned-upload-cleanup` runs every 24h on the `video-processing` queue's Redis, lists multipart uploads under the bucket and aborts those whose `Initiated` timestamp is older than `UPLOAD_ABORT_AFTER_DAYS` (default 7). The explicit-deletion path of TD-12 is unchanged and remains the fast path.
+
+**Decision:** A (Repeatable job on the existing queue)
+
+**Libraries:** bullmq
+
+
 ## Decisions Summary
 
 | ID | Scope | Decision | Recommendation | Choice |
@@ -596,7 +633,8 @@ Keying by the video's internal UUID (not by the public URL id of TD-07, and not 
 | TD-12 | Cross-layer | Resumable Upload After a Connection Failure | Persist the `uploadId`; `ListParts` is the source of truth | A (Persist only the `uploadId`) |
 | TD-13 | Backend | Persisted Video Metadata Shape | Hybrid — typed columns for consumed fields, `jsonb` for diagnostics | C (Hybrid) |
 | TD-14 | Backend | Authorization Policy for the Video Endpoints | Everything authenticated and owner-scoped in this phase | A (Authenticated and owner-scoped) |
-| TD-15 | Backend | Abandoned Uploads and Object Lifecycle | Bucket lifecycle rule — abort incomplete multipart after 7 days | A (Bucket lifecycle rule) |
+| TD-15 | Backend | Abandoned Uploads and Object Lifecycle | Bucket lifecycle rule — abort incomplete multipart after 7 days | ~~A~~ — superseded by TD-19 |
 | TD-16 | Backend | Accepted File Policy | Declare-and-verify — allowlist at initiation, `ffprobe` authoritative | A (Declare-and-verify) |
 | TD-17 | Backend | How the Test Suites Exercise the Worker | Processor instantiated in the test context; queue/storage/FFmpeg real | A (Processor in the test context) |
 | TD-18 | Backend | Resolving the Owning Channel of the Authenticated User | Add `findByUserId` to the inherited `ChannelsService` | A (`ChannelsService.findByUserId`) |
+| TD-19 | Backend | Abandoned Upload Cleanup (supersedes TD-15) | Repeatable job on the existing queue | A (Repeatable job) |
