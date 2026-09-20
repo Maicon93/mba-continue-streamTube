@@ -327,5 +327,5 @@ Keying by the video's internal UUID (not by the public URL id of TD-07, and not 
 | TD-06 | Backend | FFmpeg Invocation | Direct `child_process.spawn` of `ffprobe`/`ffmpeg` | B (Direct `child_process.spawn` of `ffprobe`/`ffmpeg`) |
 | TD-07 | Backend | Unique Public Video URL | Separate nanoid `public_id` with unique index | B (Separate short public id — nanoid — with a unique index) |
 | TD-08 | Cross-layer | Streaming and Download Delivery | Presigned `GET`, client streams directly from storage | B (Presigned `GET` URL, client streams directly from storage) |
-| TD-09 | Backend | Video Status Lifecycle and Processing Failure | Four states (`draft`/`processing`/`ready`/`failed`) + 3 attempts then `failed` | A (Four states — `draft` → `processing` → `ready` | `failed`) |
+| TD-09 | Backend | Video Status Lifecycle and Processing Failure | Four states (`draft`/`processing`/`ready`/`failed`) + 3 attempts then `failed` | A (Four states — `draft` → `processing` → `ready` \| `failed`) |
 | TD-10 | Backend | Test Strategy for Storage and Queue | Compose services with prefix isolation | A (Reuse the Compose services, isolated by prefix) |
