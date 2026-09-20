@@ -3,7 +3,7 @@ scope_type: phase
 related_phases: [3]
 status: decided
 date: 2026-09-20
-scope_description: "Backend foundation for video upload and processing: object storage client and key layout, queue technology, 10GB upload protocol, upload-completion handshake, video worker topology, FFmpeg invocation, unique public URL, streaming/download delivery, video status lifecycle, and the testing strategy against real storage and queue infrastructure."
+scope_description: "Backend foundation for video upload and processing: object storage client and key layout, queue technology, 10GB upload protocol, upload-completion handshake, upload resumption, presigned-URL endpoint configuration, video worker topology, FFmpeg invocation, unique public URL, streaming/download delivery, video status lifecycle, and the testing strategy against real storage and queue infrastructure."
 ---
 
 # Technical Decisions — Phase 03: Upload e Processamento de Vídeos
@@ -43,6 +43,8 @@ _Subprojects in scope:_
 **Recommendation:** **Option A (BullMQ + Redis)** — it is the only option whose retry/backoff/failed-job semantics come for free, and TD-09 depends on exactly those. The official `@nestjs/bullmq` integration keeps the worker inside the project's DI and testing conventions instead of introducing a second programming model, and one Redis container is a smaller operational addition than a broker for a single job type. Option C's transactional enqueue is attractive, but loading the API's database with job polling contradicts the "não impactar a performance" constraint that motivates the whole phase.
 
 **Decision:** A (BullMQ + Redis)
+
+**Note:** Redis is added to `nestjs-project/compose.yaml` as a first-class service (`redis`), reached by the API and the worker at host `redis` per the project's Docker networking rule. The phase's acceptance criteria require queue, storage and worker to be real services in Compose.
 
 ---
 
@@ -127,8 +129,8 @@ Keying by the video's internal UUID (not by the public URL id of TD-07, and not 
 **Options:**
 
 ### Option A: Client-driven completion endpoint
-- The client, having uploaded every part, calls `POST /videos/:id/upload/complete` with the collected part numbers and ETags. The API calls `CompleteMultipartUpload`, flips the status to `processing` and enqueues the job.
-- **Pros:** Deterministic and synchronous — the API knows the exact moment the object became complete and returns a meaningful error if it did not. Fully testable with supertest against real MinIO, no event plumbing. Identical behavior on MinIO and S3. The ETag list is required by the S3 API anyway, so the client already holds the data.
+- The client, having uploaded every part, calls `POST /videos/:id/upload/complete`. The API calls `ListParts` against the storage to obtain the authoritative part numbers and ETags, calls `CompleteMultipartUpload` with them, flips the status to `processing` and enqueues the job.
+- **Pros:** Deterministic and synchronous — the API knows the exact moment the object became complete and returns a meaningful error if it did not. Fully testable with supertest against real MinIO, no event plumbing. Identical behavior on MinIO and S3. Sourcing the part list from `ListParts` rather than from the request body keeps untrusted client input out of the completion call and is the same primitive TD-12 uses for resumption.
 - **Cons:** A client that uploads all parts and then disappears leaves the video stuck in `draft` with orphan parts — needs an expiry/cleanup policy.
 
 ### Option B: Storage bucket notification → webhook
@@ -136,7 +138,9 @@ Keying by the video's internal UUID (not by the public URL id of TD-07, and not 
 - **Pros:** Robust to a client that vanishes after the last part — completion is observed at the storage layer. Fewer API calls in the happy path.
 - **Cons:** MinIO event configuration is environment setup that must be reproduced in CI and in production S3 (where it means SNS/SQS/EventBridge, a different mechanism). The webhook must be reachable and authenticated. Still requires the client to call `CompleteMultipartUpload` itself with the ETags, so it does not actually remove the client's responsibility — it only moves where the job is enqueued from. Substantially harder to exercise in e2e tests.
 
-**Recommendation:** **Option A (client-driven completion endpoint)** — the ETag list makes the client a mandatory participant in completion regardless of option, so Option B adds an environment-specific event pipeline without removing the client's role. Option A also keeps the whole flow inside supertest's reach, which matters for the phase's "test against real infrastructure" requirement. The stuck-draft case is handled by the status lifecycle in TD-09, not by the transport.
+**Recommendation:** **Option A (client-driven completion endpoint)** — Option B adds an environment-specific event pipeline (MinIO notifications locally, SNS/SQS/EventBridge on real S3) that must be reproduced in CI, and it is substantially harder to exercise in e2e tests. Option A keeps the whole flow inside supertest's reach, which matters for the phase's "test against real infrastructure" requirement.
+
+**Known limitation:** the processing job is triggered by a client call, so a client that uploads every part and then disappears leaves the video in `draft` with no trigger. This is bounded by TD-12, which makes the upload resumable and exposes the real server-side state, so such a video can be completed on a later attempt rather than being lost.
 
 **Decision:** A (Client-driven completion endpoint)
 
@@ -196,6 +200,8 @@ Keying by the video's internal UUID (not by the public URL id of TD-07, and not 
 **Recommendation:** **Option B (direct `spawn`)** — the required surface is two commands, which is far below the threshold where a wrapper earns an unmaintained dependency with second-party typings. Parsing `ffprobe`'s JSON into a project-owned interface fits the codebase's strict-TypeScript policy better than `@types/fluent-ffmpeg`, and explicit exit-code handling is what makes the processing-failure path in TD-09 reliable rather than best-effort.
 
 **Decision:** B (Direct `child_process.spawn` of `ffprobe`/`ffmpeg`)
+
+**Note:** both spawns run under an explicit timeout and are killed on expiry. Without it a malformed or adversarial input can hang the process indefinitely, silently consuming one of the three attempts of TD-09 without ever failing.
 
 ---
 
@@ -315,6 +321,70 @@ Keying by the video's internal UUID (not by the public URL id of TD-07, and not 
 
 ---
 
+---
+
+## TD-11: Endpoint Used to Sign URLs (Internal vs Public)
+
+**Scope:** Backend
+
+**Capability:** Transversal — covers: `Upload de vídeos com suporte a arquivos de até 10GB sem impacto na performance`, `Reprodução via streaming (sem necessidade de download completo)`, `Download do vídeo pelo usuário`
+
+**Context:** AWS SigV4 signs the `Host` header — it is part of the canonical request and is listed in `SignedHeaders`. A URL signed for `minio:9000` is therefore rejected with `SignatureDoesNotMatch` when the request arrives with any other `Host`. This collides head-on with two facts of this project: the API and worker reach the storage at the Compose service name `minio` (the project's Docker networking rule forbids `localhost` for inter-container traffic), while the presigned URLs of TD-03 and TD-08 are consumed by a browser outside the Docker network, which cannot resolve `minio`. One endpoint value cannot serve both, and getting this wrong means either a red test suite or a feature that does not work in a real browser.
+
+**Options:**
+
+### Option A: Two configured endpoints — internal for operations, public for signing
+- `S3_ENDPOINT` (`http://minio:9000`) is used by the API and the worker for every server-side call (`CreateMultipartUpload`, `ListParts`, `CompleteMultipartUpload`, `GetObject`, `PutObject`). `S3_PUBLIC_ENDPOINT` is used only when signing URLs that leave the backend. Tests, which run inside the `nestjs-api` container, set `S3_PUBLIC_ENDPOINT` to the internal value so the signed URL is reachable from where the test runs.
+- **Pros:** Both sides get a `Host` they can actually reach, and the signature is valid in both because each is signed for the host that will receive it. The Docker networking rule is respected where it applies — container-to-container traffic never uses `localhost`. The public value is a single env var, so dev (`localhost:9000`), test (`minio:9000`) and production (a real S3 or CDN domain) differ only in configuration. No host-file edits and no dependency on a specific Docker runtime's DNS.
+- **Cons:** Two endpoint variables to configure and document, and a reader must understand why they differ. The e2e suite exercises the presign mechanism against the internal host, so the exact public host string is not covered by tests — only its shape.
+
+### Option B: Single endpoint, resolvable from both sides via a shared hostname
+- One endpoint (`http://minio:9000`) used everywhere, with the developer mapping `minio` to `127.0.0.1` in the host machine's `/etc/hosts` so the browser resolves the same name.
+- **Pros:** One variable, one value, and the signed URL is byte-identical everywhere.
+- **Cons:** Requires a manual edit to a machine-level file outside the repository, which no `docker compose up` can perform and no evaluator will have. Undocumentable as a reproducible setup step for a project whose premise is that everything runs in containers. Breaks for anyone running the stack on a remote host.
+
+### Option C: Proxy the storage through the API on a single origin
+- The API exposes the storage under its own domain and forwards requests, so only one host ever exists.
+- **Pros:** One origin, no CORS, no dual configuration.
+- **Cons:** Every uploaded and streamed byte passes through the Node process — precisely what TD-03 and TD-08 exist to prevent. Self-defeating.
+
+**Recommendation:** **Option A (two endpoints)** — it is the only option that is fully reproducible from the repository alone, and it isolates the difference into configuration, where it belongs: the internal host is a fact of the Docker network, the public host is a fact of the deployment. Option B moves a required setup step outside the repo; Option C undoes the phase's core architectural decision.
+
+**Decision:** A (Two configured endpoints — `S3_ENDPOINT` internal, `S3_PUBLIC_ENDPOINT` for signing)
+
+---
+
+## TD-12: Resumable Upload After a Connection Failure
+
+**Scope:** Cross-layer
+
+**Capability:** Upload de vídeos com suporte a arquivos de até 10GB sem impacto na performance
+
+**Context:** `docs/project-plan.md` § Pontos de Atenção states the requirement explicitly: *"o upload de até 10GB precisa ser feito de forma que não trave o sistema e permita retomar em caso de falha de conexão"*. On a multi-gigabyte transfer a dropped connection is not an edge case, it is the expected case. TD-03's multipart protocol makes resumption possible — each part is independent — but only if the `uploadId` and the set of already-uploaded parts survive the failure. Where that state lives is the decision.
+
+**Options:**
+
+### Option A: Persist only the `uploadId`; the storage is the source of truth for parts
+- The `upload_id` returned by `CreateMultipartUpload` is stored on the video row. To resume, the client calls `GET /videos/:id/upload` and the API answers by calling `ListParts` against the storage, returning which part numbers are already stored plus freshly signed URLs for the missing ones.
+- **Pros:** One nullable column, no new table. The storage already tracks uploaded parts and their ETags as part of the multipart protocol — duplicating that into the database creates two sources of truth that can disagree after a partial failure, which is exactly when correctness matters. `ListParts` is the same primitive TD-04 uses to complete the upload, so there is one code path for "what is actually uploaded". Survives an API restart, a browser crash, and a different device resuming the same video.
+- **Cons:** One extra storage round-trip when resuming. Requires the video row to hold upload state that is meaningless once the video is `ready`.
+
+### Option B: Mirror every uploaded part into the database
+- A `video_upload_parts` table records each part number and ETag as the client reports it.
+- **Pros:** Resumption state is answerable from the database alone, with no storage call.
+- **Cons:** The client reports parts, so the table records what the client claims rather than what the storage holds — the two diverge on exactly the failure that motivates the feature. A whole table, migration and cleanup path for data the storage already keeps authoritatively.
+
+### Option C: No resumption — restart the upload from zero
+- **Pros:** Nothing to build.
+- **Cons:** Directly contradicts the requirement quoted above. On a 10GB file it makes a single dropped connection cost the entire transfer, which is a near-certain failure mode rather than a rare one.
+
+**Recommendation:** **Option A (persist the `uploadId`, `ListParts` for the rest)** — resumption must reflect what the storage actually holds, and Option B's mirrored table is authoritative only until the moment it stops being correct. Option C fails the requirement outright.
+
+**Contract fixed by this decision:** `GET /videos/:id/upload` returns the parts already stored and signed URLs for the remaining ones; an abandoned upload is aborted with `AbortMultipartUpload` when the draft is deleted, so orphan parts do not accumulate.
+
+**Decision:** A (Persist only the `uploadId`; `ListParts` is the source of truth)
+
+
 ## Decisions Summary
 
 | ID | Scope | Decision | Recommendation | Choice |
@@ -329,3 +399,5 @@ Keying by the video's internal UUID (not by the public URL id of TD-07, and not 
 | TD-08 | Cross-layer | Streaming and Download Delivery | Presigned `GET`, client streams directly from storage | B (Presigned `GET` URL, client streams directly from storage) |
 | TD-09 | Backend | Video Status Lifecycle and Processing Failure | Four states (`draft`/`processing`/`ready`/`failed`) + 3 attempts then `failed` | A (Four states — `draft` → `processing` → `ready` \| `failed`) |
 | TD-10 | Backend | Test Strategy for Storage and Queue | Compose services with prefix isolation | A (Reuse the Compose services, isolated by prefix) |
+| TD-11 | Backend | Endpoint Used to Sign URLs (Internal vs Public) | Two endpoints — internal for operations, public for signing | A (Two configured endpoints) |
+| TD-12 | Cross-layer | Resumable Upload After a Connection Failure | Persist the `uploadId`; `ListParts` is the source of truth | A (Persist only the `uploadId`) |
