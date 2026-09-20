@@ -21,6 +21,16 @@ function isPgUniqueViolationOnColumn(err: unknown, column: string): boolean {
 export class ChannelsService {
   constructor(private readonly dataSource: DataSource) {}
 
+  /**
+   * Resolves the channel owned by a user. The JWT carries only the user id,
+   * so every flow that acts on behalf of a channel starts here.
+   */
+  async findByUserId(userId: string): Promise<Channel | null> {
+    return this.dataSource.getRepository(Channel).findOne({
+      where: { user_id: userId },
+    });
+  }
+
   async createChannel(userId: string, email: string): Promise<Channel> {
     const baseNickname = sanitizeNickname(email.split('@')[0]);
 

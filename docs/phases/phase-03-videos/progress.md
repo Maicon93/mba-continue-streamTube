@@ -6,9 +6,9 @@ Status per Step Implementation. Updated by `implement` as each SI closes with it
 
 | SI | Title | Status | Tests |
 |----|-------|--------|-------|
-| SI-03.1 | Dependencies, Configuration Namespaces, and New Compose Services | pending | — |
-| SI-03.2 | Channel Lookup for the Authenticated User | pending | — |
-| SI-03.3 | Video Entity and Migration | pending | — |
+| SI-03.1 | Dependencies, Configuration Namespaces, and New Compose Services | done | 6 unit (env schema: storage/queue defaults + required keys) |
+| SI-03.2 | Channel Lookup for the Authenticated User | done | 3 integration (`ChannelsService.findByUserId`) |
+| SI-03.3 | Video Entity and Migration | done | 3 integration (migration apply/revert + enum replayability) |
 | SI-03.4 | Storage Module: Dual Client, Bucket Bootstrap, Key Layout | pending | — |
 | SI-03.5 | Draft Creation and Multipart Upload Initiation | pending | — |
 | SI-03.6 | Upload Resumption | pending | — |
