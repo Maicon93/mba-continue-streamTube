@@ -3,9 +3,10 @@ kind: phase
 name: phase-03-videos
 sources_mtime:
   docs/project-plan.md: "2026-09-20T15:15:19-03:00"
-  docs/decisions/technical-decisions-phase-03-videos.md: "2026-09-20T16:32:31-03:00"
+  docs/decisions/technical-decisions-phase-03-videos.md: "2026-09-20T20:16:42-03:00"
   docs/decisions/technical-decisions-phase-02-auth.md: "2026-09-20T15:19:34-03:00"
   docs/decisions/technical-decisions-phase-01-configuracao-base.md: "2026-09-20T15:19:34-03:00"
+  docs/phases/phase-03-videos/library-refs.md: "2026-09-20T20:17:29-03:00"
   docs/phases/phase-02-auth/phase-02-auth.md: "2026-09-20T15:19:34-03:00"
 ---
 
@@ -54,38 +55,44 @@ sources_mtime:
 
 | Ref | Source | Scope | Topic | Status | Decision | Libraries |
 |-----|--------|-------|-------|--------|----------|-----------|
-| phase-03-videos/TD-01 | technical-decisions-phase-03-videos.md | Backend | Queue Technology | decided | A (BullMQ + Redis) | — |
-| phase-03-videos/TD-02 | technical-decisions-phase-03-videos.md | Backend | Object Storage Client and Key Layout | decided | A (`@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`) | — |
+| phase-03-videos/TD-01 | technical-decisions-phase-03-videos.md | Backend | Queue Technology | decided | A (BullMQ + Redis) | bullmq@^6.3.8, @nestjs/bullmq@^12.0.0 |
+| phase-03-videos/TD-02 | technical-decisions-phase-03-videos.md | Backend | Object Storage Client and Key Layout | decided | A (`@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`) | @aws-sdk/client-s3@^3.1136.0, @aws-sdk/s3-request-presigner@^3.1136.0 |
 | phase-03-videos/TD-03 | technical-decisions-phase-03-videos.md | Cross-layer | Upload Protocol for 10GB Files | decided | A (Presigned multipart upload direct to storage) | — |
 | phase-03-videos/TD-04 | technical-decisions-phase-03-videos.md | Backend | Upload Completion Handshake | decided | A (Client-driven completion endpoint) | — |
 | phase-03-videos/TD-05 | technical-decisions-phase-03-videos.md | Backend | Video Worker Topology | decided | A (Separate container, same codebase, dedicated entrypoint) | — |
 | phase-03-videos/TD-06 | technical-decisions-phase-03-videos.md | Backend | FFmpeg Invocation | decided | B (Direct `child_process.spawn` of `ffprobe`/`ffmpeg`) | — |
-| phase-03-videos/TD-07 | technical-decisions-phase-03-videos.md | Backend | Unique Public Video URL | decided | B (Separate short public id — nanoid — with a unique index) | — |
+| phase-03-videos/TD-07 | technical-decisions-phase-03-videos.md | Backend | Unique Public Video URL | decided | B (Separate short public id, `crypto.randomBytes`) | — |
 | phase-03-videos/TD-08 | technical-decisions-phase-03-videos.md | Cross-layer | Streaming and Download Delivery | decided | B (Presigned `GET` URL, client streams directly from storage) | — |
 | phase-03-videos/TD-09 | technical-decisions-phase-03-videos.md | Backend | Video Status Lifecycle and Processing Failure | decided | A (Four states — `draft` → `processing` → `ready` \| `failed`) | — |
 | phase-03-videos/TD-10 | technical-decisions-phase-03-videos.md | Backend | Test Strategy for Storage and Queue | decided | A (Reuse the Compose services, isolated by prefix) | — |
 | phase-03-videos/TD-11 | technical-decisions-phase-03-videos.md | Backend | Endpoint Used to Sign URLs (Internal vs Public) | decided | A (Two configured endpoints) | — |
 | phase-03-videos/TD-12 | technical-decisions-phase-03-videos.md | Cross-layer | Resumable Upload After a Connection Failure | decided | A (Persist only the `uploadId`) | — |
+| phase-03-videos/TD-13 | technical-decisions-phase-03-videos.md | Backend | Persisted Video Metadata Shape | decided | C (Hybrid — typed columns + `jsonb`) | — |
+| phase-03-videos/TD-14 | technical-decisions-phase-03-videos.md | Backend | Authorization Policy for the Video Endpoints | decided | A (Authenticated and owner-scoped) | — |
+| phase-03-videos/TD-15 | technical-decisions-phase-03-videos.md | Backend | Abandoned Uploads and Object Lifecycle | decided | A (Bucket lifecycle rule) | — |
+| phase-03-videos/TD-16 | technical-decisions-phase-03-videos.md | Backend | Accepted File Policy | decided | A (Declare-and-verify) | — |
+| phase-03-videos/TD-17 | technical-decisions-phase-03-videos.md | Backend | How the Test Suites Exercise the Worker | decided | A (Processor in the test context) | — |
+| phase-03-videos/TD-18 | technical-decisions-phase-03-videos.md | Backend | Resolving the Owning Channel of the Authenticated User | decided | A (`ChannelsService.findByUserId`) | — |
 
 _Source files:_
 
 - `docs/decisions/technical-decisions-phase-03-videos.md` (scope_type: phase)
 
-_Libraries column is empty by design: library pinning is `plan-resolve`'s output (`library-refs.md`), not `plan-context`'s._
+_Libraries pinned by `plan-resolve`; per-library documentation excerpts are cached in `library-refs.md`._
 
 ## Capability Coverage
 
 | Capability (from project-plan.md) | Covered by |
 |-----------------------------------|------------|
-| Serviço de armazenamento de arquivos (vídeos e thumbnails) | phase-03-videos/TD-02, phase-03-videos/TD-10, phase-03-videos/TD-11 |
-| Serviço de processamento em segundo plano (filas) | phase-03-videos/TD-01, phase-03-videos/TD-05, phase-03-videos/TD-10 |
-| Upload de vídeos com suporte a arquivos de até 10GB sem impacto na performance | phase-03-videos/TD-03, phase-03-videos/TD-10, phase-03-videos/TD-11, phase-03-videos/TD-12 |
-| Pré-cadastro automático do vídeo como rascunho ao iniciar o upload | phase-03-videos/TD-04, phase-03-videos/TD-09 |
-| Processamento automático do vídeo após upload (extração de duração e metadados) | phase-03-videos/TD-05, phase-03-videos/TD-06, phase-03-videos/TD-09, phase-03-videos/TD-10 |
-| Geração automática de thumbnail a partir de um frame do vídeo | phase-03-videos/TD-06, phase-03-videos/TD-09 |
+| Serviço de armazenamento de arquivos (vídeos e thumbnails) | phase-03-videos/TD-02, phase-03-videos/TD-10, phase-03-videos/TD-11, phase-03-videos/TD-15 |
+| Serviço de processamento em segundo plano (filas) | phase-03-videos/TD-01, phase-03-videos/TD-05, phase-03-videos/TD-10, phase-03-videos/TD-17 |
+| Upload de vídeos com suporte a arquivos de até 10GB sem impacto na performance | phase-03-videos/TD-03, phase-03-videos/TD-10, phase-03-videos/TD-11, phase-03-videos/TD-12, phase-03-videos/TD-16 |
+| Pré-cadastro automático do vídeo como rascunho ao iniciar o upload | phase-03-videos/TD-04, phase-03-videos/TD-09, phase-03-videos/TD-14, phase-03-videos/TD-18 |
+| Processamento automático do vídeo após upload (extração de duração e metadados) | phase-03-videos/TD-05, phase-03-videos/TD-06, phase-03-videos/TD-09, phase-03-videos/TD-10, phase-03-videos/TD-13, phase-03-videos/TD-17 |
+| Geração automática de thumbnail a partir de um frame do vídeo | phase-03-videos/TD-06, phase-03-videos/TD-09, phase-03-videos/TD-17 |
 | URL única por vídeo, sem conflito com outros vídeos | phase-03-videos/TD-07 |
-| Reprodução via streaming (sem necessidade de download completo) | phase-03-videos/TD-08, phase-03-videos/TD-11 |
-| Download do vídeo pelo usuário | phase-03-videos/TD-08, phase-03-videos/TD-11 |
+| Reprodução via streaming (sem necessidade de download completo) | phase-03-videos/TD-08, phase-03-videos/TD-11, phase-03-videos/TD-14 |
+| Download do vídeo pelo usuário | phase-03-videos/TD-08, phase-03-videos/TD-11, phase-03-videos/TD-14 |
 
 ## Decisions Detail
 
@@ -95,7 +102,7 @@ _Libraries column is empty by design: library pinning is `plan-resolve`'s output
 
 **Note:** Redis is added to `nestjs-project/compose.yaml` as a first-class service (`redis`), reached by API and worker at host `redis`.
 
-**Libraries:** —
+**Libraries:** `bullmq@^6.3.8`, `@nestjs/bullmq@^12.0.0`
 
 ### phase-03-videos/TD-02
 
@@ -105,7 +112,7 @@ _Libraries column is empty by design: library pinning is `plan-resolve`'s output
 
 **Note:** the object storage is **MinIO** running as a Compose service. `@aws-sdk/client-s3` is the client for the S3 *protocol*, which MinIO implements; no AWS service or account is involved.
 
-**Libraries:** —
+**Libraries:** `@aws-sdk/client-s3@^3.1136.0`, `@aws-sdk/s3-request-presigner@^3.1136.0`
 
 ### phase-03-videos/TD-03
 
@@ -141,7 +148,9 @@ _Libraries column is empty by design: library pinning is `plan-resolve`'s output
 
 ### phase-03-videos/TD-07
 
-**Recommendation:** Separate short public id (nanoid, 12 chars) with a unique index — the only option satisfying both this phase's uniqueness requirement and Fase 04's unlisted visibility, while leaving the internal UUID free to serve as the storage-key and foreign-key identity of TD-02.
+**Recommendation:** Separate short public id (12 chars) with a unique index — the only option satisfying both this phase's uniqueness requirement and Fase 04's unlisted visibility, while leaving the internal UUID free to serve as the storage-key and foreign-key identity of TD-02.
+
+**Revision (2026-09-20):** generated with `crypto.randomBytes` over an explicit 64-char URL-safe alphabet instead of the `nanoid` package — `nanoid@6` is ESM-only and the backend compiles to CommonJS. Same output shape, no new dependency.
 
 **Libraries:** —
 
@@ -178,6 +187,54 @@ _Libraries column is empty by design: library pinning is `plan-resolve`'s output
 **Recommendation:** Persist only the `uploadId`; `ListParts` is the source of truth — resumption must reflect what the storage actually holds, and a mirrored parts table is authoritative only until the moment it stops being correct.
 
 **Contract:** `GET /videos/:id/upload` returns the parts already stored plus signed URLs for the remaining ones; an abandoned upload is aborted with `AbortMultipartUpload` when the draft is deleted.
+
+**Libraries:** —
+
+### phase-03-videos/TD-13
+
+**Recommendation:** Hybrid — the split follows consumption rather than taste: duration and resolution are read by Fase 04's panel and Fase 05's player, so they are columns; codec and bitrate are never displayed, so they are payload.
+
+**Contract:** columns `duration_seconds` (int), `width`, `height` (int), `size_bytes` (bigint); `metadata` (`jsonb`) holds exactly `{ codec_name, bit_rate, avg_frame_rate, format_name }`. All nullable until processing succeeds, written in a single update together with the `ready` status of TD-09.
+
+**Libraries:** —
+
+### phase-03-videos/TD-14
+
+**Recommendation:** Everything authenticated and owner-scoped in this phase — the objects this phase creates have no visibility attribute (Fase 04) and no anonymous-access capability (Fase 05), so there is no coherent definition of "public" available to it.
+
+**Contract:** every video endpoint requires authentication; the acting user's channel (resolved per TD-18) must own the video, otherwise the request is rejected as **not found** rather than forbidden, so ownership is not probeable by enumeration.
+
+**Libraries:** —
+
+### phase-03-videos/TD-15
+
+**Recommendation:** Bucket lifecycle rule — the storage implements abandoned-multipart cleanup natively, costing one call at bucket bootstrap instead of a scheduled job with its own tests and failure modes.
+
+**Contract:** lifecycle configuration with `AbortIncompleteMultipartUpload: { DaysAfterInitiation: 7 }`, applied at bucket bootstrap.
+
+**Libraries:** —
+
+### phase-03-videos/TD-16
+
+**Recommendation:** Declare-and-verify — each check is placed where it can actually be enforced: the cheap claims at initiation, the authoritative decode in the worker. A signed `Content-Type` constrains the header, not the bytes.
+
+**Contract:** allowlist `video/mp4`, `video/webm`, `video/quicktime` at initiation; declared size `> 0` and `<= 10GB`; declared content type signed into `CreateMultipartUpload`. In the worker, a failed `ffprobe` or the absence of a video stream sets `failed` with `failure_reason` and deletes the stored object.
+
+**Libraries:** —
+
+### phase-03-videos/TD-17
+
+**Recommendation:** Instantiate the processor in the test's Nest context — keeps everything TD-10 requires real (queue, storage, FFmpeg) while removing the one thing that makes asynchronous tests unreliable, which is waiting on another process without a completion signal.
+
+**Known gap:** the worker **image** (Dockerfile, entrypoint, FFmpeg install) is not covered by an assertion; it is verified by the container starting and consuming in the Compose stack.
+
+**Libraries:** —
+
+### phase-03-videos/TD-18
+
+**Recommendation:** Add `findByUserId` to the inherited `ChannelsService` — the lookup belongs to the module that owns the entity, and that module already exports `ChannelsService` and `TypeOrmModule`. Putting `channelId` in the JWT would change a closed phase's auth contract and invalidate issued tokens; querying the `channels` table from the videos module violates the project's stated Single Responsibility principle.
+
+**Note:** this closes DG-1 — the delivered code has no path from the authenticated user (`{ sub, email }`) to their channel.
 
 **Libraries:** —
 
