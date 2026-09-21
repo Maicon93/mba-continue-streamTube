@@ -55,7 +55,7 @@ sources_mtime:
 
 | Ref | Source | Scope | Topic | Status | Decision | Libraries |
 |-----|--------|-------|-------|--------|----------|-----------|
-| phase-03-videos/TD-01 | technical-decisions-phase-03-videos.md | Backend | Queue Technology | decided | A (BullMQ + Redis) | bullmq@^6.3.8, @nestjs/bullmq@^12.0.0 |
+| phase-03-videos/TD-01 | technical-decisions-phase-03-videos.md | Backend | Queue Technology | decided | A (BullMQ + Redis) | bullmq@^5.81.5, @nestjs/bullmq@^11.0.5 |
 | phase-03-videos/TD-02 | technical-decisions-phase-03-videos.md | Backend | Object Storage Client and Key Layout | decided | A (`@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`) | @aws-sdk/client-s3@^3.1136.0, @aws-sdk/s3-request-presigner@^3.1136.0 |
 | phase-03-videos/TD-03 | technical-decisions-phase-03-videos.md | Cross-layer | Upload Protocol for 10GB Files | decided | A (Presigned multipart upload direct to storage) | — |
 | phase-03-videos/TD-04 | technical-decisions-phase-03-videos.md | Backend | Upload Completion Handshake | decided | A (Client-driven completion endpoint) | — |
@@ -70,7 +70,7 @@ sources_mtime:
 | phase-03-videos/TD-13 | technical-decisions-phase-03-videos.md | Backend | Persisted Video Metadata Shape | decided | C (Hybrid — typed columns + `jsonb`) | — |
 | phase-03-videos/TD-14 | technical-decisions-phase-03-videos.md | Backend | Authorization Policy for the Video Endpoints | decided | A (Authenticated and owner-scoped) | — |
 | phase-03-videos/TD-15 | technical-decisions-phase-03-videos.md | Backend | Abandoned Uploads and Object Lifecycle | superseded-by phase-03-videos/TD-19 | ~~A~~ | — |
-| phase-03-videos/TD-19 | technical-decisions-phase-03-videos.md | Backend | Abandoned Upload Cleanup (supersedes TD-15) | decided | A (Repeatable job on the existing queue) | bullmq@^6.3.8 |
+| phase-03-videos/TD-19 | technical-decisions-phase-03-videos.md | Backend | Abandoned Upload Cleanup (supersedes TD-15) | decided | A (Repeatable job on the existing queue) | bullmq@^5.81.5 |
 | phase-03-videos/TD-16 | technical-decisions-phase-03-videos.md | Backend | Accepted File Policy | decided | A (Declare-and-verify) | — |
 | phase-03-videos/TD-17 | technical-decisions-phase-03-videos.md | Backend | How the Test Suites Exercise the Worker | decided | A (Processor in the test context) | — |
 | phase-03-videos/TD-18 | technical-decisions-phase-03-videos.md | Backend | Resolving the Owning Channel of the Authenticated User | decided | A (`ChannelsService.findByUserId`) | — |
@@ -103,7 +103,7 @@ _Libraries pinned by `plan-resolve`; per-library documentation excerpts are cach
 
 **Note:** Redis is added to `nestjs-project/compose.yaml` as a first-class service (`redis`), reached by API and worker at host `redis`.
 
-**Libraries:** `bullmq@^6.3.8`, `@nestjs/bullmq@^12.0.0`
+**Libraries:** `bullmq@^5.81.5`, `@nestjs/bullmq@^11.0.5`
 
 ### phase-03-videos/TD-02
 
@@ -215,7 +215,7 @@ _(supersedes `phase-03-videos/TD-15`, whose premise — that the storage impleme
 
 **Contract:** a repeatable job `abandoned-upload-cleanup` runs every 24h, lists multipart uploads under the bucket and aborts those older than `UPLOAD_ABORT_AFTER_DAYS` (default 7). TD-12's explicit-deletion path is unchanged.
 
-**Libraries:** `bullmq@^6.3.8`
+**Libraries:** `bullmq@^5.81.5`
 
 ### phase-03-videos/TD-16
 

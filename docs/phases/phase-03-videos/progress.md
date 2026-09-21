@@ -10,14 +10,14 @@ Status per Step Implementation. Updated by `implement` as each SI closes with it
 | SI-03.2 | Channel Lookup for the Authenticated User | done | 3 integration (`ChannelsService.findByUserId`) |
 | SI-03.3 | Video Entity and Migration | done | 3 integration (migration apply/revert + enum replayability) |
 | SI-03.4 | Storage Module: Dual Client, Bucket Bootstrap, Key Layout | done | 4 unit (key builder) + 7 integration (MinIO real) |
-| SI-03.5 | Draft Creation and Multipart Upload Initiation | pending | — |
-| SI-03.6 | Upload Resumption | pending | — |
-| SI-03.7 | Processing Queue and Job Contract | pending | — |
-| SI-03.8 | Upload Completion and Enqueue | pending | — |
-| SI-03.9 | FFmpeg Wrapper (ffprobe and frame extraction) | pending | — |
-| SI-03.10 | Video Processor | pending | — |
-| SI-03.11 | Worker Container | pending | — |
-| SI-03.12 | Streaming and Download Delivery | pending | — |
+| SI-03.5 | Draft Creation and Multipart Upload Initiation | in progress | service + controller escritos; e2e em SI-03.13 |
+| SI-03.6 | Upload Resumption | in progress | service + controller escritos; e2e em SI-03.13 |
+| SI-03.7 | Processing Queue and Job Contract | in progress | queue module + cleanup job escritos |
+| SI-03.8 | Upload Completion and Enqueue | in progress | service + controller escritos; e2e em SI-03.13 |
+| SI-03.9 | FFmpeg Wrapper (ffprobe and frame extraction) | done | 9 integration (ffprobe, thumbnail, timeout, arquivo inválido) |
+| SI-03.10 | Video Processor | done | 6 integration (MinIO + FFmpeg reais, idempotência, falha) |
+| SI-03.11 | Worker Container | in progress | entrypoint, módulo e serviço no compose escritos |
+| SI-03.12 | Streaming and Download Delivery | in progress | service + controller escritos; e2e em SI-03.13 |
 | SI-03.13 | End-to-End Flow Test | pending | — |
 | SI-03.14 | Documentation Update | pending | — |
 

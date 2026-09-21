@@ -1,11 +1,11 @@
 ---
 libs:
   "bullmq":
-    version: "^6.3.8"
+    version: "^5.81.5"
     context7_id: "/taskforcesh/bullmq"
     fetched_at: "2026-09-20"
   "@nestjs/bullmq":
-    version: "^12.0.0"
+    version: "^11.0.5"
     context7_id: "/nestjs/bull"
     fetched_at: "2026-09-20"
   "@aws-sdk/client-s3":
@@ -31,11 +31,14 @@ Recorded here so the decision is not re-litigated at implementation time:
 - **`nanoid`** — evaluated for TD-07 and rejected. `nanoid@6` declares `"type": "module"` with no CommonJS entry point, and `nestjs-project` emits CommonJS and runs its suites through `ts-jest` in CommonJS. Adopting it would mean pinning the older dual-format `nanoid@3` or depending on Node's `require(esm)` interop inside the Jest transform. Replaced by `crypto.randomBytes` over an explicit alphabet (see TD-07 Revisions).
 - **`fluent-ffmpeg`** — evaluated for TD-06 and rejected (2.1.3, slow maintenance cadence, callback API, second-party typings via `@types/fluent-ffmpeg`). Replaced by `child_process.spawn` of the `ffprobe`/`ffmpeg` binaries, which the worker image must carry either way.
 - **`minio`** (the MinIO SDK) — evaluated for TD-02 and rejected: multipart methods are internal (`src/internal/client.ts`) and presigning an individual part goes through the generic `presignedUrl`, whereas the AWS SDK exposes `UploadPartCommand` presigning as a first-class API. See TD-02.
+- **A per-bucket lifecycle rule / CORS configuration** — evaluated for TD-15 and for the storage bootstrap, and rejected because MinIO does not implement them: `PutBucketLifecycle` does not support `AbortIncompleteMultipartUpload` (documented in MinIO's S3 compatibility reference and confirmed against `RELEASE.2025-09-07T16-13-09Z`), and `PutBucketCors` answers `NotImplemented`. Cleanup moved to a repeatable job (TD-19); CORS is a MinIO server setting in `compose.yaml`.
 - **`ioredis`** — not declared directly; it arrives as a transitive dependency of `bullmq` and is configured through BullMQ's `connection` option.
 
 ## bullmq
 
-**Version:** `^6.3.8` · **context7:** `/taskforcesh/bullmq`
+**Version:** `^5.81.5` · **context7:** `/taskforcesh/bullmq`
+
+**Why 5 and not 6:** `@nestjs/bullmq@11` declares `bullmq: ^3 || ^4 || ^5 || ^6` as a peer, but the pair 11 + 6 breaks at shutdown — `Queue.onApplicationShutdown` reaches `RedisConnection.close`, which dereferences an internal field that bullmq 6 no longer populates, and any suite that builds the app without initializing it (the OpenAPI export spec does exactly that) dies with `TypeError: Cannot read properties of undefined (reading 'off')`. Version 5 is the release line `@nestjs/bullmq@11` was actually built against. Going to `@nestjs/bullmq@12` instead is not an option — see below.
 
 Used by TD-01 (queue), TD-09 (retry/failure policy), TD-10 (prefix isolation in tests) and TD-17 (deterministic completion in tests).
 
@@ -75,14 +78,16 @@ At-least-once. The processing handler must be idempotent — re-running against 
 
 ## @nestjs/bullmq
 
-**Version:** `^12.0.0` · **context7:** `/nestjs/bull`
+**Version:** `^11.0.5` · **context7:** `/nestjs/bull`
 
-Peer dependencies of 12.x — verified compatible with the installed stack:
+**Why 11 and not 12:** `@nestjs/bullmq@12.0.0` declares `"type": "module"` and ships an ESM-only `dist/index.js`, which `ts-jest` cannot load in this CommonJS project — every suite importing the processor dies with `SyntaxError: Unexpected token 'export'`. Version `11.0.5` is the last CommonJS build and its peer range already covers the installed stack. Same class of problem as `nanoid` in TD-07; the decision (BullMQ via `@nestjs/bullmq`) is unchanged, only the pinned version.
+
+Peer dependencies of 11.0.5 — verified compatible with the installed stack:
 
 ```
 bullmq:         ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0
-@nestjs/core:   ^10.0.0 || ^11.0.0 || ^12.0.0
-@nestjs/common: ^10.0.0 || ^11.0.0 || ^12.0.0
+@nestjs/core:   ^10.0.0 || ^11.0.0
+@nestjs/common: ^10.0.0 || ^11.0.0
 ```
 
 ### Root registration

@@ -17,6 +17,23 @@ services:
       redis:
         condition: service_healthy
 
+  video-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    # Same image and same code as the API, different entrypoint: FFmpeg is
+    # CPU-bound and must not compete with request handling.
+    command: sh -c "npm run start:worker"
+    volumes:
+      - .:/home/node/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
   db:
     image: postgres:17
     ports:

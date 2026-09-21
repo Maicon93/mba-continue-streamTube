@@ -26,7 +26,7 @@ Deliver object storage, a background processing queue and a video worker so a us
 
 **Technical actions:**
 
-- Install production dependencies in `nestjs-project`: `bullmq@^6.3.8`, `@nestjs/bullmq@^12.0.0`, `@aws-sdk/client-s3@^3.1136.0`, `@aws-sdk/s3-request-presigner@^3.1136.0` (per `library-refs.md`)
+- Install production dependencies in `nestjs-project`: `bullmq@^5.81.5`, `@nestjs/bullmq@^11.0.5` (11 is the last CommonJS build; 12 is ESM-only and breaks `ts-jest`), `@aws-sdk/client-s3@^3.1136.0`, `@aws-sdk/s3-request-presigner@^3.1136.0` (per `library-refs.md`)
 - Create `src/config/storage.config.ts` — `registerAs('storage', ...)` reading `S3_ENDPOINT` (string, required — internal, the Compose service name), `S3_PUBLIC_ENDPOINT` (string, required — used only for signing URLs that leave the backend, per `phase-03-videos/TD-11`), `S3_REGION` (string, default `'us-east-1'`), `S3_ACCESS_KEY` / `S3_SECRET_KEY` (string, required), `S3_BUCKET` (string, default `'streamtube-videos'`), `UPLOAD_PART_SIZE_BYTES` (number, default `10485760`), `UPLOAD_MAX_SIZE_BYTES` (number, default `10737418240`), `UPLOAD_URL_TTL_SECONDS` (number, default `3600`), `DELIVERY_URL_TTL_SECONDS` (number, default `900`), `UPLOAD_ABORT_AFTER_DAYS` (number, default `7`)
 - Create `src/config/queue.config.ts` — `registerAs('queue', ...)` reading `REDIS_HOST` (string, default `'redis'`), `REDIS_PORT` (number, default `6379`), `QUEUE_PREFIX` (string, default `'streamtube'`), `VIDEO_JOB_ATTEMPTS` (number, default `3`), `VIDEO_JOB_BACKOFF_MS` (number, default `2000`), `FFMPEG_TIMEOUT_MS` (number, default `120000`)
 - Register both factories in `AppModule`'s `ConfigModule.forRoot({ load: [...] })`
