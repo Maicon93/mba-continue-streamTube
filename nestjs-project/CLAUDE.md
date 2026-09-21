@@ -14,10 +14,30 @@ Then verify each infrastructure service is actually ready to accept connections 
 
 - **PostgreSQL:** `docker compose exec db pg_isready -U streamtube` — expect `accepting connections`
 - **Redis:** `docker compose exec redis redis-cli ping` — expect `PONG`
-- **MinIO:** `curl -s -o /dev/null -w '%{http_code}' http://localhost:9000/minio/health/live` — expect `200`
+- **MinIO:** `curl -s -o /dev/null -w '%{http_code}' http://localhost:19000/minio/health/live` — expect `200`
 - **Video worker:** `docker compose logs video-worker | tail` — expect `Video worker started — consuming the processing queue`
 
 Only start the NestJS dev server (`npm run start:dev`) when the user **explicitly** asks to run the application — never as part of "start the environment".
+
+## Host ports
+
+Every published port is offset by a leading `1` so this stack can run next to
+another one using the defaults (`3000`, `5432`, `6379`, `9000`, …). **Inside
+the Docker network nothing changes** — services still talk to each other on
+`db:5432`, `redis:6379`, `minio:9000`. Only the host mapping differs:
+
+| Service | Host | Container |
+|---|---|---|
+| API | `13000` | 3000 |
+| PostgreSQL | `15432` | 5432 |
+| Redis | `16379` | 6379 |
+| MinIO API | `19000` | 9000 |
+| MinIO console | `19001` | 9001 |
+| Mailpit SMTP | `11025` | 1025 |
+| Mailpit UI | `18025` | 8025 |
+
+`S3_PUBLIC_ENDPOINT` and `APP_URL` point at the host ports, because a browser
+consumes them from outside Docker.
 
 ## Development Environment
 
@@ -35,18 +55,18 @@ docker compose exec nestjs-api npm run start:dev
 ```
 
 Services:
-- `nestjs-api` — NestJS API, port `3000`
-- `db` — PostgreSQL 17, port `5432`, database `streamtube`, user/password `streamtube`
-- `mailpit` — SMTP `1025`, web UI `8025`
-- `minio` — S3-compatible object storage, API `9000`, console `9001`, user/password `streamtube`
-- `redis` — queue backend for BullMQ, port `6379`
+- `nestjs-api` — NestJS API, container port `3000`, published on the host at **`13000`**
+- `db` — PostgreSQL 17, container port `5432`, host `15432`, database `streamtube`, user/password `streamtube`
+- `mailpit` — SMTP `1025` (host `11025`), web UI `8025` (host `18025`)
+- `minio` — S3-compatible object storage, API `9000` (host `19000`), console `9001` (host `19001`), user/password `streamtube`
+- `redis` — queue backend for BullMQ, container port `6379`, host `16379`
 - `video-worker` — same image as `nestjs-api`, started with `npm run start:worker`; consumes the processing queue and runs FFmpeg. Binds no port.
 
 All verification and teardown commands run on the **host machine**:
 
 ```bash
 # Verify NestJS is running (expect 200 + "Hello World!")
-curl http://localhost:3000
+curl http://localhost:13000
 
 # Verify PostgreSQL is ready (runs inside the db container)
 docker compose exec db pg_isready -U streamtube
@@ -88,7 +108,7 @@ npm run format                           # Prettier formatting
 docker compose ps
 docker compose logs nestjs-api
 docker compose exec db pg_isready -U streamtube
-curl http://localhost:3000
+curl http://localhost:13000
 ```
 
 ### Test execution
