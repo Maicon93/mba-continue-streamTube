@@ -106,4 +106,3 @@ export class VideoNotReadyException extends DomainException {
     super('VIDEO_NOT_READY', 409, 'Video has not finished processing');
   }
 }
-

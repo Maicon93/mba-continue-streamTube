@@ -10,11 +10,26 @@ const requiredEnv = {
   S3_SECRET_KEY: 'secret-key',
 };
 
-const validate = (env: Record<string, string>) =>
+/** Joi types the validated value as `any`; this is the shape it produces. */
+interface ValidatedEnv {
+  SWAGGER_ENABLED: string;
+  S3_ENDPOINT: string;
+  S3_PUBLIC_ENDPOINT: string;
+  UPLOAD_PART_SIZE_BYTES: number;
+  UPLOAD_MAX_SIZE_BYTES: number;
+  REDIS_HOST: string;
+  REDIS_PORT: number;
+  QUEUE_PREFIX: string;
+  VIDEO_JOB_ATTEMPTS: number;
+}
+
+const validate = (
+  env: Record<string, string>,
+): { value: ValidatedEnv; error?: Error } =>
   envValidationSchema.validate(
     { ...requiredEnv, ...env },
     { allowUnknown: true, abortEarly: false },
-  );
+  ) as { value: ValidatedEnv; error?: Error };
 
 describe('envValidationSchema — SWAGGER_ENABLED', () => {
   it('should reject SWAGGER_ENABLED with an invalid value', () => {
@@ -42,7 +57,8 @@ describe('envValidationSchema — SWAGGER_ENABLED', () => {
 
 describe('envValidationSchema — storage and queue (Phase 03)', () => {
   it('should reject a missing S3_ACCESS_KEY', () => {
-    const { S3_ACCESS_KEY: _omitted, ...withoutAccessKey } = requiredEnv;
+    const withoutAccessKey = { ...requiredEnv };
+    delete (withoutAccessKey as Partial<typeof requiredEnv>).S3_ACCESS_KEY;
     const { error } = envValidationSchema.validate(withoutAccessKey, {
       allowUnknown: true,
       abortEarly: false,
@@ -52,7 +68,8 @@ describe('envValidationSchema — storage and queue (Phase 03)', () => {
   });
 
   it('should reject a missing S3_SECRET_KEY', () => {
-    const { S3_SECRET_KEY: _omitted, ...withoutSecretKey } = requiredEnv;
+    const withoutSecretKey = { ...requiredEnv };
+    delete (withoutSecretKey as Partial<typeof requiredEnv>).S3_SECRET_KEY;
     const { error } = envValidationSchema.validate(withoutSecretKey, {
       allowUnknown: true,
       abortEarly: false,

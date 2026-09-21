@@ -27,19 +27,34 @@ Status per Step Implementation. Updated by `implement` as each SI closes with it
 - [x] `docker compose exec nestjs-api npm run test:e2e` — **63 passing / 63** (4 suites)
 - [x] `docker compose exec nestjs-api npx tsc --noEmit` — exit 0
 - [x] `docker compose exec nestjs-api npm run build` — exit 0
-- [x] Lint clean on every file this phase added or touched — exit 0
+- [x] `docker compose exec nestjs-api npm run lint` — exit 0, **0 errors, 0 warnings**
 
-The repository-wide `npm run lint` still reports the 150 pre-existing errors
-recorded in the baseline below. They live in Phase 01/02 files and were left
-untouched by explicit decision: this phase's scope is Phase 03, and rewriting
-the professor's test files is outside it. Every file added or modified here
-lints clean.
+The base repository arrived with 150 lint errors in Phase 01/02 files. The
+Definition of Done requires the command to pass, so they were fixed rather
+than scoped out — **without disabling or relaxing a single rule**. The fixes
+were type-level only:
+
+- `channels.service.ts` and `create-test-data-source.ts` (the only production
+  files affected): read the Postgres error through `QueryFailedError.driverError`
+  instead of casting the error to `any`, and derive the entity-list type from
+  TypeORM's own `DataSourceOptions` instead of naming `Function`.
+- `src/test/mailpit.ts`: typed the Mailpit API responses — one file, and the
+  18 errors in `mail.service.integration-spec.ts` disappeared with it.
+- Spec files: typed fixtures in place of `as any` object literals, mapped-type
+  mocks (`MockOf<T>`) so `unbound-method` stops firing on `expect(svc.method)`,
+  and typed views over supertest's `any`-typed `res.body`.
+
+One fixture became more faithful in the process: `makeUniqueError` in
+`channels.service.spec.ts` used to fabricate the error by setting `code` and
+`detail` directly on `QueryFailedError`. It now builds a real driver error and
+passes it to the constructor, which is how TypeORM actually produces it.
 
 ## Final state
 
 | | |
 |---|---|
 | Unit + integration | 176 / 176 (was 144 at baseline) |
+| Lint | 0 errors, 0 warnings (was 150 errors) |
 | E2E | 63 / 63 (was 52) |
 | New Compose services | `minio`, `redis`, `video-worker` — all healthy |
 | Endpoints | 6, all in `openapi.json` |
@@ -52,5 +67,5 @@ Recorded at the start of the phase so regressions are distinguishable from pre-e
 - Unit + integration: **144 passing / 144** (23 suites)
 - E2E: **52 passing / 52** (3 suites)
 - `npx tsc --noEmit`: exit 0
-- `npm run lint`: **150 errors** already present in the base repository (144 in the professor's test files, 6 in `channels.service.ts`) — out of this phase's scope by decision; the phase's own files must lint clean.
+- `npm run lint`: **150 errors** already present in the base repository (144 in test files, 6 in `channels.service.ts`). All fixed during this phase — see the Definition of Done above.
 - One fix was required before starting: `src/database/migrations.integration-spec.ts` dropped the managed tables but not the `verification_tokens_type_enum` type, so the suite passed only against a virgin database and failed on any second run. The `beforeAll` now drops the type as well.
