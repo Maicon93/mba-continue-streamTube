@@ -6,6 +6,8 @@ import databaseConfig from './config/database.config';
 import queueConfig from './config/queue.config';
 import storageConfig from './config/storage.config';
 import { envValidationSchema } from './config/env.validation';
+import { ChannelsModule } from './channels/channels.module';
+import { UsersModule } from './users/users.module';
 import { QueueModule } from './queue/queue.module';
 import { StorageModule } from './storage/storage.module';
 import { AbandonedUploadCleanup } from './queue/abandoned-upload-cleanup';
@@ -37,6 +39,11 @@ import { VideoProcessingModule } from './videos/video-processing.module';
         synchronize: false,
       }),
     }),
+    // `Video` relates to `Channel`, which relates to `User`. With
+    // autoLoadEntities, TypeORM only sees what the imported modules register,
+    // so both owners must be in the worker's graph or metadata building fails.
+    UsersModule,
+    ChannelsModule,
     QueueModule,
     StorageModule,
     VideoProcessingModule,

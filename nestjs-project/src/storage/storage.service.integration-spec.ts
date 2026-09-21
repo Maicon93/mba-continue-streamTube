@@ -125,12 +125,18 @@ describe('StorageService (integration, real MinIO)', () => {
 
   it('should sign a download URL carrying the attachment disposition', async () => {
     const key = thumbnailKey(randomUUID());
-    await service.putObject(key, Buffer.from('not-really-a-jpeg'), 'image/jpeg');
+    await service.putObject(
+      key,
+      Buffer.from('not-really-a-jpeg'),
+      'image/jpeg',
+    );
 
     const url = await service.signDownload(key, { filename: 'my video.mp4' });
 
     expect(url).toContain('response-content-disposition');
-    expect(decodeURIComponent(url)).toContain('attachment; filename="my video.mp4"');
+    expect(decodeURIComponent(url)).toContain(
+      'attachment; filename="my video.mp4"',
+    );
 
     await service.deleteObject(key);
   });

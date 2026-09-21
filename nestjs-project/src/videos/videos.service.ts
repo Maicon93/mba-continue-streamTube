@@ -37,13 +37,19 @@ import type { VideoJobData } from './video-job.types';
 const PG_UNIQUE_VIOLATION = '23505';
 const PUBLIC_ID_MAX_RETRIES = 5;
 
+/** The driver fields TypeORM does not surface on QueryFailedError. */
+interface PostgresDriverError {
+  code?: string;
+  detail?: string;
+}
+
 function isPublicIdCollision(err: unknown): boolean {
   if (!(err instanceof QueryFailedError)) return false;
-  const e = err as any;
+  const driverError = err.driverError as PostgresDriverError | undefined;
   return (
-    e.code === PG_UNIQUE_VIOLATION &&
-    typeof e.detail === 'string' &&
-    e.detail.includes('public_id')
+    driverError?.code === PG_UNIQUE_VIOLATION &&
+    typeof driverError.detail === 'string' &&
+    driverError.detail.includes('public_id')
   );
 }
 
@@ -202,7 +208,10 @@ export class VideosService {
     const video = await this.findOwned(userId, publicId);
 
     if (video.source_key && video.upload_id) {
-      await this.storage.abortMultipartUpload(video.source_key, video.upload_id);
+      await this.storage.abortMultipartUpload(
+        video.source_key,
+        video.upload_id,
+      );
     }
     await this.videos.remove(video);
   }
@@ -251,10 +260,7 @@ export class VideosService {
     return video;
   }
 
-  private async requireReady(
-    userId: string,
-    publicId: string,
-  ): Promise<Video> {
+  private async requireReady(userId: string, publicId: string): Promise<Video> {
     const video = await this.findOwned(userId, publicId);
     if (video.status !== VideoStatus.Ready || !video.source_key) {
       throw new VideoNotReadyException();

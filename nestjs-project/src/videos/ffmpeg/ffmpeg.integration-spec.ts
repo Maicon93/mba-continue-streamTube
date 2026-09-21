@@ -38,7 +38,9 @@ describe('ffmpeg wrappers (integration, real binaries)', () => {
 
       // An undecodable container is a verdict about the file, not a
       // transient failure — it must not be retried by the job.
-      await expect(probe(notAVideo, TIMEOUT_MS)).rejects.toThrow(NotAVideoError);
+      await expect(probe(notAVideo, TIMEOUT_MS)).rejects.toThrow(
+        NotAVideoError,
+      );
     });
 
     it('should reject a media file with no video stream', async () => {
@@ -46,13 +48,21 @@ describe('ffmpeg wrappers (integration, real binaries)', () => {
       await runCommand(
         'ffmpeg',
         [
-          '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1',
-          '-c:a', 'aac', '-y', audioOnly,
+          '-f',
+          'lavfi',
+          '-i',
+          'sine=frequency=440:duration=1',
+          '-c:a',
+          'aac',
+          '-y',
+          audioOnly,
         ],
         TIMEOUT_MS,
       );
 
-      await expect(probe(audioOnly, TIMEOUT_MS)).rejects.toThrow(NotAVideoError);
+      await expect(probe(audioOnly, TIMEOUT_MS)).rejects.toThrow(
+        NotAVideoError,
+      );
     });
   });
 

@@ -60,7 +60,12 @@ export function runCommand(
       clearTimeout(timer);
       if (timedOut) {
         reject(
-          new FfmpegError(command, code, `timed out after ${timeoutMs}ms`, true),
+          new FfmpegError(
+            command,
+            code,
+            `timed out after ${timeoutMs}ms`,
+            true,
+          ),
         );
         return;
       }

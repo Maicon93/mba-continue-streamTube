@@ -23,7 +23,8 @@ export class AbandonedUploadCleanup {
   ) {}
 
   async run(now: Date = new Date()): Promise<number> {
-    const cutoff = now.getTime() - this.config.uploadAbortAfterDays * MS_PER_DAY;
+    const cutoff =
+      now.getTime() - this.config.uploadAbortAfterDays * MS_PER_DAY;
     const uploads = await this.storage.listMultipartUploads();
 
     let aborted = 0;

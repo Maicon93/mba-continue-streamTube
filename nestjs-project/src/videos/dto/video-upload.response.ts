@@ -4,7 +4,9 @@ export class UploadPartUrlDto {
   @ApiProperty({ example: 1 })
   partNumber: number;
 
-  @ApiProperty({ description: 'Presigned URL to PUT this part directly to the storage' })
+  @ApiProperty({
+    description: 'Presigned URL to PUT this part directly to the storage',
+  })
   url: string;
 
   @ApiProperty({ example: '2026-09-20T21:00:00.000Z' })

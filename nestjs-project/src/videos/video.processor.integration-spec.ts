@@ -19,7 +19,11 @@ const BUCKET = `test-processor-${randomUUID()}`.toLowerCase();
 
 /** The processor only reads `data`; the rest of Job is irrelevant here. */
 const fakeJob = (videoId: string): Job<VideoJobData> =>
-  ({ data: { videoId }, attemptsMade: 0, opts: { attempts: 3 } }) as Job<VideoJobData>;
+  ({
+    data: { videoId },
+    attemptsMade: 0,
+    opts: { attempts: 3 },
+  }) as Job<VideoJobData>;
 
 describe('VideoProcessor (integration — real MinIO, real FFmpeg)', () => {
   let dataSource: DataSource;
@@ -123,7 +127,11 @@ describe('VideoProcessor (integration — real MinIO, real FFmpeg)', () => {
   it('should fail a non-video object and delete it from the storage', async () => {
     const video = await seedVideo();
     const key = sourceKey(video.id, 'video/mp4');
-    await storage.putObject(key, Buffer.from('definitely not a video'), 'video/mp4');
+    await storage.putObject(
+      key,
+      Buffer.from('definitely not a video'),
+      'video/mp4',
+    );
     await videos.update(video.id, { source_key: key });
 
     await processor.process(fakeJob(video.id));
@@ -137,14 +145,20 @@ describe('VideoProcessor (integration — real MinIO, real FFmpeg)', () => {
   }, 60000);
 
   it('should skip a job whose video no longer exists', async () => {
-    await expect(processor.process(fakeJob(randomUUID()))).resolves.toBeUndefined();
+    await expect(
+      processor.process(fakeJob(randomUUID())),
+    ).resolves.toBeUndefined();
   });
 
   it('should keep the video processing while retry attempts remain', async () => {
     const video = await seedVideo();
 
     await processor.onFailed(
-      { data: { videoId: video.id }, attemptsMade: 1, opts: { attempts: 3 } } as Job<VideoJobData>,
+      {
+        data: { videoId: video.id },
+        attemptsMade: 1,
+        opts: { attempts: 3 },
+      } as Job<VideoJobData>,
       new Error('transient'),
     );
 
@@ -157,7 +171,11 @@ describe('VideoProcessor (integration — real MinIO, real FFmpeg)', () => {
     const video = await seedVideo();
 
     await processor.onFailed(
-      { data: { videoId: video.id }, attemptsMade: 3, opts: { attempts: 3 } } as Job<VideoJobData>,
+      {
+        data: { videoId: video.id },
+        attemptsMade: 3,
+        opts: { attempts: 3 },
+      } as Job<VideoJobData>,
       new Error('storage unreachable'),
     );
 

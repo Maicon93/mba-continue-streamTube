@@ -21,10 +21,16 @@ export default registerAs('storage', () => ({
     process.env.UPLOAD_MAX_SIZE_BYTES || '10737418240',
     10,
   ),
-  uploadUrlTtlSeconds: parseInt(process.env.UPLOAD_URL_TTL_SECONDS || '3600', 10),
+  uploadUrlTtlSeconds: parseInt(
+    process.env.UPLOAD_URL_TTL_SECONDS || '3600',
+    10,
+  ),
   deliveryUrlTtlSeconds: parseInt(
     process.env.DELIVERY_URL_TTL_SECONDS || '900',
     10,
   ),
-  uploadAbortAfterDays: parseInt(process.env.UPLOAD_ABORT_AFTER_DAYS || '7', 10),
+  uploadAbortAfterDays: parseInt(
+    process.env.UPLOAD_ABORT_AFTER_DAYS || '7',
+    10,
+  ),
 }));
