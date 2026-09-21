@@ -1,4 +1,12 @@
-import { DataSource, EntitySchema, MigrationInterface } from 'typeorm';
+import { DataSource, MigrationInterface } from 'typeorm';
+import type { DataSourceOptions } from 'typeorm';
+
+/**
+ * Derived from TypeORM's own option type rather than spelled out: writing
+ * `Function` here is what `no-unsafe-function-type` flags, and entity classes
+ * are exactly what this accepts.
+ */
+type EntityList = NonNullable<DataSourceOptions['entities']>;
 
 interface TestDataSourceOptions {
   synchronize?: boolean;
@@ -6,7 +14,7 @@ interface TestDataSourceOptions {
 }
 
 export function createTestDataSource(
-  entities: (Function | string | EntitySchema<any>)[],
+  entities: EntityList,
   options: TestDataSourceOptions = {},
 ): DataSource {
   const { synchronize = true, migrations } = options;
@@ -23,9 +31,11 @@ export function createTestDataSource(
   });
 }
 
+/** Ordered child-first: every table here is referenced by the next one. */
 export async function cleanAllTables(dataSource: DataSource): Promise<void> {
   await dataSource.query('DELETE FROM "refresh_tokens"');
   await dataSource.query('DELETE FROM "verification_tokens"');
+  await dataSource.query('DELETE FROM "videos"');
   await dataSource.query('DELETE FROM "channels"');
   await dataSource.query('DELETE FROM "users"');
 }

@@ -1,8 +1,15 @@
-import { QueryFailedError } from 'typeorm';
+import { DataSource, EntityManager, QueryFailedError } from 'typeorm';
 import { ChannelsService } from './channels.service';
 import { Channel } from './entities/channel.entity';
 
-function makeManager(overrides: Record<string, jest.Mock> = {}): any {
+/** Only the three EntityManager methods createChannel actually calls. */
+interface ManagerMock {
+  findOne: jest.Mock;
+  create: jest.Mock;
+  save: jest.Mock;
+}
+
+function makeManager(overrides: Partial<ManagerMock> = {}): ManagerMock {
   return {
     findOne: jest.fn(),
     create: jest.fn(),
@@ -23,17 +30,30 @@ function makeChannel(nickname: string): Channel {
   return c;
 }
 
+/**
+ * Built the way TypeORM builds it: the pg driver error carries `code` and
+ * `detail`, and QueryFailedError copies them onto itself. Constructing it
+ * from a real driver error keeps this fixture faithful to production.
+ */
 function makeUniqueError(): QueryFailedError {
-  const err = new QueryFailedError('INSERT', [], new Error()) as any;
-  err.code = '23505';
-  err.detail = 'Key (nickname)=(abc) already exists.';
-  return err;
+  const driverError = Object.assign(new Error('duplicate key value'), {
+    code: '23505',
+    detail: 'Key (nickname)=(abc) already exists.',
+  });
+  return new QueryFailedError('INSERT', [], driverError);
 }
 
-function makeDataSource(manager: any): any {
+/**
+ * A DataSource whose `transaction` runs the callback inline with the mocked
+ * manager. Cast at the boundary: the service only uses `transaction`, so
+ * implementing the full interface would be noise.
+ */
+function makeDataSource(manager: ManagerMock): DataSource {
   return {
-    transaction: jest.fn((cb: (manager: any) => Promise<any>) => cb(manager)),
-  };
+    transaction: jest.fn((cb: (manager: EntityManager) => Promise<unknown>) =>
+      cb(manager as unknown as EntityManager),
+    ),
+  } as unknown as DataSource;
 }
 
 describe('ChannelsService', () => {

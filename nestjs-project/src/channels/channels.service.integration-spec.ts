@@ -1,28 +1,17 @@
-import { DataSource, Repository } from 'typeorm';
-import { RefreshToken } from '../auth/entities/refresh-token.entity';
-import { VerificationToken } from '../auth/entities/verification-token.entity';
-import {
-  cleanAllTables,
-  createTestDataSource,
-} from '../test/create-test-data-source';
-import { User } from '../users/entities/user.entity';
+import { DataSource } from 'typeorm';
 import { ChannelsService } from './channels.service';
 import { Channel } from './entities/channel.entity';
+import { User } from '../users/entities/user.entity';
+import { createTestDataSource } from '../test/create-test-data-source';
 
-const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken];
-
-describe('ChannelsService (integration)', () => {
+describe('ChannelsService.findByUserId (integration)', () => {
   let dataSource: DataSource;
-  let channelsService: ChannelsService;
-  let userRepository: Repository<User>;
-  let channelRepository: Repository<Channel>;
+  let service: ChannelsService;
 
   beforeAll(async () => {
-    dataSource = createTestDataSource(ALL_ENTITIES);
+    dataSource = createTestDataSource([User, Channel]);
     await dataSource.initialize();
-    userRepository = dataSource.getRepository(User);
-    channelRepository = dataSource.getRepository(Channel);
-    channelsService = new ChannelsService(dataSource);
+    service = new ChannelsService(dataSource);
   });
 
   afterAll(async () => {
@@ -30,63 +19,45 @@ describe('ChannelsService (integration)', () => {
   });
 
   beforeEach(async () => {
-    await cleanAllTables(dataSource);
+    await dataSource.query('DELETE FROM channels');
+    await dataSource.query('DELETE FROM users');
   });
 
-  let userCounter = 0;
-  async function createUser(): Promise<User> {
-    return userRepository.save(
-      userRepository.create({
-        email: `ch_svc_${++userCounter}@example.com`,
-        password: 'hashed',
+  const createUser = async (email: string): Promise<User> =>
+    dataSource.getRepository(User).save(
+      dataSource.getRepository(User).create({
+        email,
+        password: 'hash',
+        is_confirmed: true,
       }),
     );
-  }
 
-  describe('createChannel', () => {
-    it('persists a channel derived from email', async () => {
-      const user = await createUser();
+  it('should return the channel owned by the user', async () => {
+    const user = await createUser('owner@streamtube.test');
+    const created = await service.createChannel(user.id, user.email);
 
-      const channel = await channelsService.createChannel(
-        user.id,
-        'mynick@example.com',
-      );
+    const found = await service.findByUserId(user.id);
 
-      expect(channel.id).toBeDefined();
-      expect(channel.nickname).toBe('mynick');
-      expect(channel.name).toBe('mynick');
-      expect(channel.user_id).toBe(user.id);
+    expect(found).not.toBeNull();
+    expect(found!.id).toBe(created.id);
+    expect(found!.nickname).toBe('owner');
+  });
 
-      const persisted = await channelRepository.findOneBy({ user_id: user.id });
-      expect(persisted).not.toBeNull();
-      expect(persisted!.nickname).toBe('mynick');
-    });
+  it('should return null for a user that owns no channel', async () => {
+    const user = await createUser('channelless@streamtube.test');
 
-    it('derives nickname from email prefix', async () => {
-      const user = await createUser();
+    await expect(service.findByUserId(user.id)).resolves.toBeNull();
+  });
 
-      const channel = await channelsService.createChannel(
-        user.id,
-        'John.Doe+tag@example.com',
-      );
+  it('should not return another user channel', async () => {
+    const owner = await createUser('first@streamtube.test');
+    const other = await createUser('second@streamtube.test');
+    await service.createChannel(owner.id, owner.email);
+    const otherChannel = await service.createChannel(other.id, other.email);
 
-      expect(channel.nickname).toBe('johndoetag');
-    });
+    const found = await service.findByUserId(other.id);
 
-    it('resolves nickname collision by appending a suffix', async () => {
-      const user1 = await createUser();
-      const user2 = await createUser();
-
-      await channelsService.createChannel(user1.id, 'shared@example.com');
-      const channel2 = await channelsService.createChannel(
-        user2.id,
-        'shared@example.com',
-      );
-
-      expect(channel2.nickname).toMatch(/^shared_[a-z0-9]{3}$/);
-
-      const channels = await channelRepository.find();
-      expect(channels).toHaveLength(2);
-    });
+    expect(found!.id).toBe(otherChannel.id);
+    expect(found!.user_id).toBe(other.id);
   });
 });
