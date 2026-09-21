@@ -438,6 +438,362 @@
           "auth"
         ]
       }
+    },
+    "/videos": {
+      "post": {
+        "description": "Pre-registers the video as a draft and opens a multipart upload, returning one presigned URL per part. The file is uploaded directly to the object storage — it never passes through the API.",
+        "operationId": "VideosController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVideoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateVideoResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a video draft and start its upload",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/videos/{publicId}/upload": {
+      "get": {
+        "description": "Returns the parts the storage already holds and fresh presigned URLs for the ones still missing, so an interrupted upload can be resumed.",
+        "operationId": "VideosController_uploadStatus",
+        "parameters": [
+          {
+            "name": "publicId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadStatusResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Inspect an upload in progress",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/videos/{publicId}/upload/complete": {
+      "post": {
+        "description": "Completes the multipart upload using the part list read from the storage, then enqueues the processing job.",
+        "operationId": "VideosController_completeUpload",
+        "parameters": [
+          {
+            "name": "publicId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteUploadResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Finish the upload and queue the video for processing",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/videos/{publicId}": {
+      "get": {
+        "operationId": "VideosController_findOne",
+        "parameters": [
+          {
+            "name": "publicId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read a video and its processing state",
+        "tags": [
+          "videos"
+        ]
+      },
+      "delete": {
+        "description": "Aborts an upload still in progress so its parts are released immediately instead of waiting for the cleanup job.",
+        "operationId": "VideosController_remove",
+        "parameters": [
+          {
+            "name": "publicId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a video",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/videos/{publicId}/stream": {
+      "get": {
+        "description": "Redirects to a short-lived presigned URL. The player issues range requests straight at the storage, which answers 206 Partial Content — the API never carries video bytes.",
+        "operationId": "VideosController_stream",
+        "parameters": [
+          {
+            "name": "publicId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to the presigned URL"
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get the playback URL",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/videos/{publicId}/download": {
+      "get": {
+        "description": "Same presigned mechanism as streaming, with a content disposition that makes the browser save the file.",
+        "operationId": "VideosController_download",
+        "parameters": [
+          {
+            "name": "publicId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to the presigned URL"
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get the download URL",
+        "tags": [
+          "videos"
+        ]
+      }
     }
   },
   "info": {
@@ -481,6 +837,88 @@
         "type": "object",
         "properties": {}
       },
+      "CreateVideoDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "My first upload",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "video/mp4",
+              "video/webm",
+              "video/quicktime"
+            ],
+            "example": "video/mp4"
+          },
+          "sizeBytes": {
+            "type": "number",
+            "description": "Size of the file the client is about to upload, in bytes",
+            "example": 104857600,
+            "minimum": 1,
+            "maximum": 10737418240
+          }
+        },
+        "required": [
+          "title",
+          "contentType",
+          "sizeBytes"
+        ]
+      },
+      "UploadPartUrlDto": {
+        "type": "object",
+        "properties": {
+          "partNumber": {
+            "type": "number",
+            "example": 1
+          },
+          "url": {
+            "type": "string",
+            "description": "Presigned URL to PUT this part directly to the storage"
+          },
+          "expiresAt": {
+            "type": "string",
+            "example": "2026-09-20T21:00:00.000Z"
+          }
+        },
+        "required": [
+          "partNumber",
+          "url",
+          "expiresAt"
+        ]
+      },
+      "CreateVideoResponseDto": {
+        "type": "object",
+        "properties": {
+          "publicId": {
+            "type": "string",
+            "example": "aB3dE6fH9jK2"
+          },
+          "uploadId": {
+            "type": "string"
+          },
+          "partSizeBytes": {
+            "type": "number",
+            "example": 10485760
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UploadPartUrlDto"
+            }
+          }
+        },
+        "required": [
+          "publicId",
+          "uploadId",
+          "partSizeBytes",
+          "parts"
+        ]
+      },
       "ApiErrorEnvelope": {
         "type": "object",
         "properties": {
@@ -515,6 +953,119 @@
           "statusCode",
           "error",
           "message"
+        ]
+      },
+      "StoredPartDto": {
+        "type": "object",
+        "properties": {
+          "partNumber": {
+            "type": "number",
+            "example": 1
+          },
+          "sizeBytes": {
+            "type": "number",
+            "example": 10485760
+          }
+        },
+        "required": [
+          "partNumber",
+          "sizeBytes"
+        ]
+      },
+      "UploadStatusResponseDto": {
+        "type": "object",
+        "properties": {
+          "uploadId": {
+            "type": "string"
+          },
+          "partSizeBytes": {
+            "type": "number",
+            "example": 10485760
+          },
+          "uploadedParts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoredPartDto"
+            }
+          },
+          "missingParts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UploadPartUrlDto"
+            }
+          }
+        },
+        "required": [
+          "uploadId",
+          "partSizeBytes",
+          "uploadedParts",
+          "missingParts"
+        ]
+      },
+      "CompleteUploadResponseDto": {
+        "type": "object",
+        "properties": {
+          "publicId": {
+            "type": "string",
+            "example": "aB3dE6fH9jK2"
+          },
+          "status": {
+            "type": "string",
+            "example": "processing"
+          }
+        },
+        "required": [
+          "publicId",
+          "status"
+        ]
+      },
+      "VideoResponseDto": {
+        "type": "object",
+        "properties": {
+          "publicId": {
+            "type": "string",
+            "example": "aB3dE6fH9jK2"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "example": "ready"
+          },
+          "durationSeconds": {
+            "type": "object",
+            "nullable": true,
+            "example": 12
+          },
+          "width": {
+            "type": "object",
+            "nullable": true,
+            "example": 1920
+          },
+          "height": {
+            "type": "object",
+            "nullable": true,
+            "example": 1080
+          },
+          "thumbnailUrl": {
+            "type": "object",
+            "nullable": true
+          },
+          "failureReason": {
+            "type": "object",
+            "nullable": true
+          }
+        },
+        "required": [
+          "publicId",
+          "title",
+          "status",
+          "durationSeconds",
+          "width",
+          "height",
+          "thumbnailUrl",
+          "failureReason"
         ]
       }
     }

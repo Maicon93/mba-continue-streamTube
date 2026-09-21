@@ -10,7 +10,7 @@ More info in the project overview: [docs/project-plan.md](docs/project-plan.md)
 
 This is a monorepo with two main areas:
 
-- `nestjs-project/` — Backend API (NestJS 11, TypeScript, Express). Contains modules for users, channels, videos, comments, etc.
+- `nestjs-project/` — Backend API (NestJS 11, TypeScript, Express). Contains modules for users, channels, videos, comments, etc. Also hosts the video worker: same codebase, separate entrypoint (`src/main.worker.ts`) and separate container.
 - `docs/` — Project documentation, architecture diagrams, and planning.
 - `next-frontend/` (Next.js) — not yet initialized
 
@@ -23,7 +23,7 @@ See `docs/diagrams/software-arch.mermaid` for the full diagram. Key containers:
 - **Video Worker** (FFmpeg) → consumes jobs from queue, processes videos, updates DB and storage
 - **Database** (PostgreSQL) → users, channels, videos, comments, likes
 - **Object Storage** (S3/MinIO) → video files and thumbnails
-- **Message Queue** (TBD) → video processing job queue
+- **Message Queue** (BullMQ over Redis) → video processing job queue
 - **Email Service** (SMTP) → account confirmation and password recovery
 
 ## Docker Networking
@@ -36,6 +36,50 @@ Inside a container, `localhost` refers to the container itself, not the host mac
 - **Wrong:** `DB_HOST=localhost`
 
 This applies to all environment variables, configuration files, and code that references service hosts.
+
+## Video Module (Phase 03)
+
+Upload, processing and delivery of videos. Decisions in
+[docs/decisions/technical-decisions-phase-03-videos.md](docs/decisions/technical-decisions-phase-03-videos.md),
+plan in [docs/phases/phase-03-videos/](docs/phases/phase-03-videos/).
+
+**Upload never passes through the API.** The client asks the API to start an
+upload, receives one presigned URL per part, and `PUT`s the parts directly to
+the object storage. This is what makes a 10GB upload possible without tying up
+a Node process.
+
+Endpoints (`nestjs-project/src/videos/`), all authenticated and owner-scoped:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /videos` | Pre-registers the video as a draft and opens the multipart upload |
+| `GET /videos/:publicId/upload` | Parts already stored + fresh URLs for the missing ones (resumption) |
+| `POST /videos/:publicId/upload/complete` | Completes the upload and enqueues processing |
+| `GET /videos/:publicId` | Video state and metadata |
+| `GET /videos/:publicId/stream` | 302 to a presigned URL; the storage answers ranges with 206 |
+| `GET /videos/:publicId/download` | Same, with `Content-Disposition: attachment` |
+| `DELETE /videos/:publicId` | Deletes the video, aborting an upload in progress |
+
+A video belonging to another channel is reported as `404`, never `403` — a
+`403` would confirm the id exists.
+
+**Processing.** On completion the API enqueues `{ videoId }` on the
+`video-processing` queue. The `video-worker` container consumes it, downloads
+the object, runs `ffprobe` for duration and metadata, extracts a thumbnail
+with `ffmpeg` at 10% of the duration, and flips the status. The handler is
+idempotent because delivery is at-least-once.
+
+Status lifecycle: `draft` → `processing` → `ready` | `failed`. Three attempts
+with exponential backoff; the video stays `processing` while attempts remain.
+A file `ffprobe` cannot decode goes straight to `failed` and its object is
+deleted, without burning the remaining attempts.
+
+**Storage.** MinIO (S3-compatible) at `videos/{videoId}/source{ext}` and
+`videos/{videoId}/thumbnail.jpg`. Two S3 clients: `S3_ENDPOINT` for
+server-side calls and `S3_PUBLIC_ENDPOINT` for signing URLs that leave the
+backend — SigV4 signs the `Host` header, so one endpoint cannot serve both a
+container and a browser. Abandoned multipart uploads are cleaned by a
+repeatable job, because MinIO does not support the equivalent lifecycle rule.
 
 ## Working Principles
 
