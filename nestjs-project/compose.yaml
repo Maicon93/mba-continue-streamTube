@@ -4,7 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     ports:
-      - 3000:3000
+      # Host-side ports are offset by a leading 1 so this stack can run
+      # alongside another one using the defaults. Inside the Docker network
+      # the services keep their standard ports.
+      - "13000:3000"
     volumes:
       - .:/home/node/app
     depends_on:
@@ -37,7 +40,7 @@ services:
   db:
     image: postgres:17
     ports:
-      - "5432:5432"
+      - "15432:5432"
     environment:
       - POSTGRES_USER=streamtube
       - POSTGRES_PASSWORD=streamtube
@@ -51,15 +54,15 @@ services:
   mailpit:
     image: axllent/mailpit
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "11025:1025"
+      - "18025:8025"
 
   minio:
     image: minio/minio
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "19000:9000"
+      - "19001:9001"
     environment:
       - MINIO_ROOT_USER=streamtube
       - MINIO_ROOT_PASSWORD=streamtube
@@ -77,7 +80,7 @@ services:
   redis:
     image: redis:8-alpine
     ports:
-      - "6379:6379"
+      - "16379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
