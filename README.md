@@ -55,12 +55,15 @@ O diagrama de arquitetura completo (C4) está em `docs/diagrams/software-arch.me
 
 Os dois subprojetos têm stacks Docker **separadas**. Suba primeiro o backend, rode as migrations e depois o frontend.
 
-### 1. Backend (NestJS + PostgreSQL + Mailpit)
+### 1. Backend (NestJS + PostgreSQL + MinIO + Redis + worker de vídeo)
 
 ```bash
 cd nestjs-project
 
-# Sobe API, banco e Mailpit
+# Cria o .env a partir do exemplo (passo obrigatório — o .env não vai no git)
+cp .env.example .env
+
+# Sobe API, banco, Mailpit, MinIO, Redis e o worker de vídeo
 docker compose up -d
 
 # Instala dependências (apenas na primeira vez)
@@ -77,10 +80,19 @@ Serviços disponíveis:
 
 | Serviço | URL / Porta |
 |---------|-------------|
-| API NestJS | http://localhost:3000 |
-| PostgreSQL | `localhost:5432` (db/user/senha: `streamtube`) |
-| Mailpit (UI de e-mails) | http://localhost:8025 |
-| Swagger (opcional) | http://localhost:3000/api/docs — habilite com `SWAGGER_ENABLED=true` |
+| API NestJS | http://localhost:13000 |
+| Swagger | http://localhost:13000/api/docs — habilite com `SWAGGER_ENABLED=true` |
+| PostgreSQL | `localhost:15432` (db/user/senha: `streamtube`) |
+| Mailpit (UI de e-mails) | http://localhost:18025 |
+| MinIO (console) | http://localhost:19001 (user/senha: `streamtube`) |
+| MinIO (API S3) | http://localhost:19000 |
+| Redis | `localhost:16379` |
+| Worker de vídeo | sem porta — `docker compose logs -f video-worker` |
+
+> **Portas com offset.** Todas as portas publicadas no host levam um `1` na
+> frente (13000, 15432, 19000, …) para que esta stack conviva com outra que
+> use as padrão. Dentro da rede Docker nada muda: os serviços continuam
+> conversando em `db:5432`, `redis:6379` e `minio:9000`.
 
 ### 2. Frontend (Next.js)
 
@@ -124,7 +136,30 @@ Sufixos: `*.test.ts(x)` (unitário), `*.integration.test.ts(x)` (Route Handlers 
 
 ## ✅ Funcionalidades implementadas
 
-**Fase 01 — Configuração base** e **Fase 02 — Autenticação** estão concluídas (backend + frontend).
+**Fase 01 — Configuração base**, **Fase 02 — Autenticação** (backend + frontend) e **Fase 03 — Upload e Processamento de Vídeos** (backend) estão concluídas.
+
+### Vídeos (Fase 03)
+
+Upload de arquivos de até **10GB sem passar pela API**: o cliente pede o início
+do upload, recebe uma URL pré-assinada por parte e envia os pedaços direto para
+o object storage. Concluído o envio, um **worker em container separado** consome
+a fila, extrai duração e metadados com `ffprobe`, gera o thumbnail com `ffmpeg` e
+publica o vídeo.
+
+| Método & Rota | Descrição |
+|---------------|-----------|
+| `POST /videos` | Cria o rascunho e abre o upload multipart (devolve as URLs das partes) |
+| `GET /videos/:publicId/upload` | Partes já armazenadas + URLs das que faltam (retomada) |
+| `POST /videos/:publicId/upload/complete` | Conclui o upload e enfileira o processamento |
+| `GET /videos/:publicId` | Estado e metadados do vídeo |
+| `GET /videos/:publicId/stream` | Redireciona para a URL de reprodução (o storage responde `206`) |
+| `GET /videos/:publicId/download` | Mesma URL com `Content-Disposition: attachment` |
+| `DELETE /videos/:publicId` | Remove o vídeo, abortando um upload em andamento |
+
+Ciclo de status: `draft` → `processing` → `ready` \| `failed` (3 tentativas antes
+de falhar). Documentação da fase em
+[`docs/phases/phase-03-videos/`](docs/phases/phase-03-videos/) e decisões em
+[`docs/decisions/technical-decisions-phase-03-videos.md`](docs/decisions/technical-decisions-phase-03-videos.md).
 
 ### Autenticação (Fase 02)
 
